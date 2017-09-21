@@ -1,0 +1,15 @@
+[package]
+name = "DikuMUD-Rust"
+version = "0.1.0"
+authors = ["sproctor <sproctor@gmail.com>"]
+
+[dependencies]
+bitflags = "0.9"
+enum-map = "0.2"
+libc = "0.2"
+getopts = "0.2"
+rand = "0.3"
+time = "0.1"
+nix = "0.9"
+chan = "0.1"
+chan-signal = "0.3"
