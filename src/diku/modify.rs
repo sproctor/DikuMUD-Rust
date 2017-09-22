@@ -5,8 +5,8 @@ use std::io::SeekFrom;
 
 use diku::interpreter::fill_word;
 
-pub fn build_help_index(file: &File) -> HashMap<String, u64> {
-    let table = HashMap::new();
+pub fn build_help_index(file: &mut File) -> HashMap<String, u64> {
+    let mut table = HashMap::new();
 
     loop {
         let pos = file.seek(SeekFrom::Current(0)).expect("seek");
@@ -27,13 +27,14 @@ pub fn build_help_index(file: &File) -> HashMap<String, u64> {
             table.insert(word, pos);
         }
 
+        let mut tmp_buf = String::new();
         loop {
-            buf.clear();
-            if !fgets(&mut buf, 80, file) || buf.chars().nth(0) == Some('#') {
+            tmp_buf.clear();
+            if !fgets(&mut tmp_buf, 80, file) || tmp_buf.chars().nth(0) == Some('#') {
                 break;
             }
         }
-        if buf.chars().nth(1) == Some('#') {
+        if tmp_buf.chars().nth(1) == Some('#') {
             break;
         }
     }
@@ -83,6 +84,30 @@ fn starting_whitespace(argument: &str) -> usize {
     return pos;
 }
 
+// c fgets equivalent, except max is the number of characters to read, not characters + 1
+fn fgets(dst: &mut String, max: usize, fp: &mut File) -> bool {
+    let mut c: [u8; 1] = [0; 1];
+    let mut p: Vec<u8> = Vec::new();
+
+    while max != 0 {
+        if fp.read_exact(&mut c).is_err() {
+            break;
+        }
+        p.push(c[0]);
+        if c[0] == b'\n' {
+            break;
+        }
+    }
+
+    if p.len() == 0 {
+        return false;
+    }
+    
+    dst.push_str(&String::from_utf8(p).expect("Invalid UTF-8"));
+
+    return true;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,24 +129,4 @@ mod tests {
         assert_eq!((" bar", String::from("foo")), one_word("foo bar"));
         assert_eq!((" \"HELLO WORLD\"\r\n", String::from("test")), one_word("TEST \"HELLO WORLD\"\r\n"));
     }
-}
-
-// c fgets equivalent, except max is the number of characters to read, not characters + 1
-fn fgets(dst: &mut String, max: usize, fp: &File) -> bool {
-    let mut c: [u8; 1];
-    let mut p: Vec<u8> = Vec::new();
-
-    while max != 0 {
-        if fp.read_exact(&mut c).is_err() {
-            break;
-        }
-        p.push(c[0]);
-        if c[0] == b'\n' {
-            break;
-        }
-    }
-
-    dst.push_str(&String::from_utf8(p).expect("Invalid UTF-8"));
-
-    return p.len() == 0;
 }

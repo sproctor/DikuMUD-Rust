@@ -34,8 +34,8 @@ pub struct Game {
     mob_f:              File,
     obj_f:              File,
     help_f:             Option<File>,
-    help_index:         HashMap<String, u32>,
-    player_table:       HashMap<String, u32>,
+    help_index:         HashMap<String, u64>,
+    player_table:       HashMap<String, u64>,
     shutdown_signal:    Receiver<Signal>,
     hup_signal:         Receiver<Signal>,
     log_signal:         Receiver<Signal>,
@@ -57,10 +57,10 @@ impl Game {
 
         let mob_f = File::open(constants::MOB_FILE).expect("boot");
         let obj_f = File::open(constants::OBJ_FILE).expect("boot");
-        let help_f = File::open(constants::HELP_KWRD_FILE).ok();
+        let mut help_f = File::open(constants::HELP_KWRD_FILE).ok();
         let help_index = match help_f {
             None => HashMap::new(),
-            Some(file) => build_help_index(&file),
+            Some(mut file) => build_help_index(&mut file),
         };
 
         let mut game = Game {
