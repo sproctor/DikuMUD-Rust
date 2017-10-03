@@ -9,6 +9,7 @@ extern crate time;
 extern crate nix;
 extern crate chan;
 extern crate chan_signal;
+extern crate regex;
 
 use std::env;
 use std::path::Path;

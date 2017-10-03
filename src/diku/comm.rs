@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::os::unix::io::RawFd;
-use nix::sys::socket::{bind, linger, listen, socket, setsockopt, sockopt, AddressFamily, InetAddr, IpAddr, Ipv4Addr, SockAddr, SockType, SockFlag, sockaddr_in};
+use nix::sys::socket::{bind, linger, listen, socket, setsockopt, sockopt, AddressFamily, InetAddr, IpAddr, Ipv4Addr, SockAddr, SockType, SockFlag};
 
 use diku::types::DescriptorData;
 

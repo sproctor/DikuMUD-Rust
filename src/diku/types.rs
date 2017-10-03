@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::mem::transmute;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 use std::vec::Vec;
@@ -36,7 +37,7 @@ pub enum ItemType {
 
 // for 'wear_flags'
 bitflags! {
-    struct WearFlags: u16 {
+    pub struct WearFlags: u16 {
         const ITEM_TAKE         = 0b0000000000000001;
         const ITEM_WEAR_FINGER  = 0b0000000000000010;
         const ITEM_WEAR_NECK    = 0b0000000000000100;
@@ -57,7 +58,7 @@ bitflags! {
 
 // for 'extra_flags'
 bitflags! {
-    struct ItemExtraFlags : u16 {
+    pub struct ItemExtraFlags : u16 {
         const ITEM_GLOW         = 0b0000000000000001;
         const ITEM_HUM          = 0b0000000000000010;
         const ITEM_DARK         = 0b0000000000000100;
@@ -95,7 +96,7 @@ pub enum Liquid {
 
 // for containers - value[1]
 bitflags! {
-    struct ContainerFlags : u8 {
+    pub struct ContainerFlags : u8 {
         const CONT_CLOSEABLE    = 0b00000001;
         const CONT_PICKPROOF    = 0b00000010;
         const CONT_CLOSED       = 0b00000100;
@@ -142,7 +143,7 @@ pub struct ObjData {
 
 // For 'room_flags'
 bitflags! {
-    struct RoomFlags: u16 {
+    pub struct RoomFlags: u16 {
         const DARK      = 0b0000000000000001;
         const DEATH     = 0b0000000000000010;
         const NO_MOB    = 0b0000000000000100;
@@ -166,7 +167,7 @@ pub enum Direction {
 }
 
 bitflags! {
-    struct ExitFlags: u8 {
+    pub struct ExitFlags: u8 {
         const EX_ISDOOR     = 0b00000001;
         const EX_CLOSED     = 0b00000010;
         const EX_LOCKED     = 0b00000100;
@@ -187,12 +188,19 @@ pub enum SectorType {
     WaterNoSwim,
 }
 
+impl From<u8> for SectorType {
+    fn from(n: u8) -> SectorType {
+        assert!(SectorType::Inside as u8 <= n && n <= SectorType::WaterNoSwim as u8);
+        unsafe { transmute(n) }
+    }
+}
+
 pub struct RoomDirectionData {
-    general_direction:  String, // When look DIR.
-    keyword:            String, // for open/close
-    exit_info:          i16,    // Exit info
-    key:                i16,    // Key's number (-1 for no key)
-    to_room:            i16,    // Where direction leads (NOWHERE)
+    pub general_description:    String,     // When look DIR.
+    pub keyword:                String,     // for open/close
+    pub exit_info:              ExitFlags,  // Exit info
+    pub key:                    i16,        // Key's number (-1 for no key)
+    pub to_room:                i16,        // Where direction leads (NOWHERE)
 }
 
 pub struct RoomData {
@@ -245,7 +253,7 @@ pub enum Condition {
 
 // Bitvector for 'affected_by'
 bitflags! {
-    struct AffectedFlags: u32 {
+    pub struct AffectedFlags: u32 {
         const AFF_BLIND             = 1 << 0;
         const AFF_INVISIBLE         = 1 << 1;
         const AFF_DETECT_EVIL       = 1 << 2;
@@ -340,7 +348,7 @@ pub enum Position {
 
 // for specials.act
 bitflags! {
-    struct SpecialActFlags: u8 {
+    pub struct SpecialActFlags: u8 {
         const ACT_SPEC          = 0b00000001; // special routine to be called if exist
         const ACT_SENTINEL      = 0b00000010; // this mobile not to be moved
         const ACT_SCAVENGER     = 0b00000100; // pick up stuff lying around
