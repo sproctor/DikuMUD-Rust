@@ -1,7 +1,11 @@
+use std::io::BufReader;
+use std::io::prelude::*;
+use std::time::Duration;
+
 use rand::distributions::{IndependentSample, Range};
 use rand;
+use regex::Regex;
 use time;
-use std::time::Duration;
 
 use diku::types;
 use diku::constants;
@@ -44,4 +48,29 @@ pub fn mud_time_passed(duration: Duration) -> types::TimeInfoData {
         month: month as u8,
         year: year as u16,
     }
+}
+
+pub fn read_number<R: Read>(reader: &mut BufReader<R>) -> u32 {
+    // TODO: make the following static
+    let re: Regex = Regex::new(r"\s*#(\d+)").expect("read_number regex");
+
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    let cap = re.captures(&mut line).unwrap();
+    cap[1].parse::<u32>().unwrap()
+}
+
+pub fn fread_string<R: Read>(reader: &mut BufReader<R>) -> String {
+    let mut string = String::new();
+    loop {
+        reader.read_line(&mut string).expect("fread_string");
+        match string.find('~') {
+            None => (),
+            Some(offset) => {
+                string.drain(offset..);
+                break;
+            },
+        }
+    }
+    string
 }

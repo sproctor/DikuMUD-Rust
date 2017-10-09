@@ -1,21 +1,22 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Cursor};
+use std::io::{BufReader, SeekFrom};
 use std::io::prelude::*;
+use std::str;
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bincode::{deserialize_from, Infinite};
 use chan::Receiver;
 use chan_signal;
 use chan_signal::Signal;
 
-use regex::Regex;
-
 use diku::constants;
-use diku::modify::build_help_index;
-use diku::types::{DescriptorData, ExitFlags, EX_ISDOOR, EX_PICKPROOF, RoomDirectionData, RoomFlags, SectorType, Sky, Sunlight, WeatherData};
-use diku::utility::{dice, log, mud_time_passed};
+use diku::fight::load_messages;
+use diku::modify::{build_help_index, fgets};
+use diku::types::*;
+use diku::utility::{dice, fread_string, log, mud_time_passed, read_number};
 
 enum ResetMode {
     DoNot,  // Don't reset, and don't update age.
@@ -42,12 +43,20 @@ struct ResetCom {
 
 struct ZoneData {
     name:       String,         // name of this zone
-    lifespan:   i32,            // how long between resets (minutes)
-    age:        i32,            // current age of this zone (minutes)
-    top:        i32,            // upper limit for rooms in this zone
+    lifespan:   u32,            // how long between resets (minutes)
+    age:        u32,            // current age of this zone (minutes)
+    top:        u32,            // upper limit for rooms in this zone
 
     reset_mode: ResetMode,      // conditions for reset
     cmd:        Vec<ResetCom>,  // command table for reset
+}
+
+// element in monster and object index-tables
+struct IndexData {
+    virtual_nr: u32,
+    pos:        u64,
+    number:     u32,
+    func:       Option<fn(i32)>,
 }
 
 pub static TICS: AtomicUsize = ATOMIC_USIZE_INIT;
@@ -71,8 +80,12 @@ pub struct Game {
     obj_f:              File,
     help_f:             Option<File>,
     help_index:         HashMap<String, u64>,
+    mob_index:          Vec<IndexData>,
+    obj_index:          Vec<IndexData>,
     player_table:       HashMap<String, u64>,
     zone_table:         Vec<ZoneData>,
+    world:              HashMap<u32, RoomData>,
+    fight_messages:     HashMap<u32, Vec<MessageType>>,
     shutdown_signal:    Receiver<Signal>,
     hup_signal:         Receiver<Signal>,
     log_signal:         Receiver<Signal>,
@@ -92,8 +105,8 @@ impl Game {
 
         log("Opening mobile, object and help files.");
 
-        let mob_f = File::open(constants::MOB_FILE).expect("boot");
-        let obj_f = File::open(constants::OBJ_FILE).expect("boot");
+        let mut mob_f = File::open(constants::MOB_FILE).expect("boot");
+        let mut obj_f = File::open(constants::OBJ_FILE).expect("boot");
         let mut help_f = File::open(constants::HELP_KWRD_FILE).ok();
         let help_index = match help_f.as_mut() {
             None => HashMap::new(),
@@ -105,6 +118,20 @@ impl Game {
 
         log("Loading rooms.");
         let world = boot_world(&zone_table);
+
+        // Using a hash table instead of renumbering rooms -sproctor
+
+        log("Generating index tables for mobile and object files.");
+	    let mob_index = generate_indices(&mut mob_f);
+	    let obj_index = generate_indices(&mut obj_f);
+
+        // skip renumbering zone table - sproctor
+
+        log("Generating player index.");
+	    let player_table = build_player_index();
+
+        log("Loading fight messages.");
+	    let fight_messages = load_messages();
 
         let mut game = Game {
             descriptor_list: Vec::new(),
@@ -130,8 +157,12 @@ impl Game {
             obj_f,
             help_f,
             help_index,
-            player_table: HashMap::new(),
+            mob_index,
+            obj_index,
+            player_table,
             zone_table,
+            world,
+            fight_messages,
             shutdown_signal: chan_signal::notify(&[Signal::USR2]),
             hup_signal: chan_signal::notify(&[Signal::HUP, Signal::INT, Signal::TERM]),
             log_signal: chan_signal::notify(&[Signal::ALRM]),
@@ -191,6 +222,55 @@ impl Game {
     }
 }
 
+// generate index table for the player file
+fn build_player_index() -> HashMap<String, u64> {
+    let file = File::open(constants::PLAYER_FILE).expect("build player index");
+    let mut reader = BufReader::new(file);
+
+    let mut player_table = HashMap::new();
+    let mut nr = 0;
+
+    loop {
+        let dummy: CharFileU = match deserialize_from(&mut reader, Infinite) {
+            Ok(v) => v,
+            Err(_) => break,
+        };
+        
+        let name = String::from(str::from_utf8(&dummy.name).unwrap().to_lowercase());
+        player_table.insert(name, nr);
+        nr += 1;
+    }
+
+    player_table
+}
+
+// generate index table for object or monster file
+fn generate_indices(file: &mut File) -> Vec<IndexData> {
+    let mut index = Vec::new();
+
+    file.seek(SeekFrom::Start(0)).unwrap();
+
+    loop {
+        let buf = fgets(80, file).unwrap();
+        match buf.chars().nth(0).unwrap() {
+            '#' => {
+                let virtual_nr = buf.get(1..).unwrap().parse::<u32>().unwrap();
+                let pos = file.seek(SeekFrom::Current(0)).unwrap();
+                index.push(IndexData {
+                    virtual_nr,
+                    pos,
+                    number: 0,
+                    func: None,
+                });
+            },
+            '$' => break,
+            _ => (),
+        }
+    }
+
+    index
+}
+
 fn file_to_string(name: &str) -> String {
     let mut file = File::open(name).expect("open file-to-string");
     let mut contents = String::new();
@@ -218,9 +298,9 @@ fn boot_zones() -> Vec<ZoneData> {
             break;
         }
         let mut words = line.split_whitespace();
-        let top = words.next().unwrap().parse::<i32>().expect("parse zone top");
-        let lifespan = words.next().unwrap().parse::<i32>().expect("parse zone lifespan");
-        let reset_mode = match words.next().unwrap().parse::<i32>().expect("parse zone reset_mode") {
+        let top = words.next().unwrap().parse::<u32>().expect("parse zone top");
+        let lifespan = words.next().unwrap().parse::<u32>().expect("parse zone lifespan");
+        let reset_mode = match words.next().unwrap().parse::<u8>().expect("parse zone reset_mode") {
             0 => ResetMode::DoNot,
             1 => ResetMode::NoPC,
             2 => ResetMode::Do,
@@ -268,10 +348,11 @@ fn boot_zones() -> Vec<ZoneData> {
     zone_table
 }
 
-fn boot_world(zone_table: &Vec<ZoneData>) {
+fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
     let file = File::open(constants::WORLD_FILE).expect("boot_world: could not open world file.");
     let mut reader = BufReader::new(file);
 
+    let mut world = HashMap::new();
     let mut zone = 0;
 
     loop {
@@ -291,30 +372,53 @@ fn boot_world(zone_table: &Vec<ZoneData>) {
 
 			// OBS: Assumes ordering of input rooms
 
-            assert!(virtual_nr > if zone > 0 { zone_table[zone - 1].top } else { -1 },
+            assert!(zone == 0 || virtual_nr > zone_table[zone - 1].top,
                 "Room nr {} is below zone {}.\n", virtual_nr, zone);
             while virtual_nr > zone_table[zone].top {
                 zone += 1;
                 assert!(zone < zone_table.len(), "Room {} is outside of any zone.\n", virtual_nr);
             }
         }
-        let mut room_flags = RoomFlags::from_bits(words.next().unwrap().parse::<u16>().unwrap());
-        let mut sector_type = SectorType::from(words.next().unwrap().parse::<u8>().unwrap());
+        let room_flags = RoomFlags::from_bits(words.next().unwrap().parse::<u16>().unwrap()).unwrap();
+        let sector_type = SectorType::from(words.next().unwrap().parse::<u8>().unwrap());
 
+        let mut dir_option = HashMap::new();
+        let mut ex_description = Vec::new();
         loop {
             let mut line = String::new();
             reader.read_line(&mut line).unwrap();
             let chk = line.trim();
-            let mut dir_option = Vec::new();
+            
             match chk.bytes().nth(0).unwrap() {
                 b'D' => {
-                    let dir = chk.get(1..).unwrap().parse::<usize>().unwrap();
-                    dir_option[dir] = setup_dir(&mut reader);
+                    let dir = Direction::from(chk.get(1..).unwrap().parse::<u8>().unwrap());
+                    dir_option.insert(dir, setup_dir(&mut reader));
                 },
-                _ => (),
+                b'E' => {
+                    let keyword = fread_string(&mut reader);
+                    let description = fread_string(&mut reader);
+                    ex_description.push(ExtraDescrData { keyword, description })
+                },
+                b'$' => break,
+                _ => panic!("Invalid value in room extra fields {}", chk),
             }
         }
+        world.insert(virtual_nr, RoomData {
+            number: virtual_nr,
+            zone,
+            sector_type,
+            name: temp,
+            description,
+            ex_description,
+            dir_option,
+            room_flags,
+            light: 0,
+            funct: None,
+            contents: Vec::new(),
+            people: Vec::new(),
+        });
     }
+    world
 }
 
 // read direction data
@@ -327,12 +431,12 @@ fn setup_dir<R: Read>(reader: &mut BufReader<R>) -> RoomDirectionData {
     reader.read_line(&mut line).unwrap();
     let mut words = line.split_whitespace();
     let exit_info = match words.next().unwrap().parse::<u32>().unwrap() {
-        1 => EX_ISDOOR,
-        2 => EX_ISDOOR | EX_PICKPROOF,
+        1 => ExitFlags::EX_ISDOOR,
+        2 => ExitFlags::EX_ISDOOR | ExitFlags::EX_PICKPROOF,
         _ => ExitFlags::empty(),
     };
-    let key = words.next().unwrap().parse::<i16>().unwrap();
-    let to_room = words.next().unwrap().parse::<i16>().unwrap();
+    let key = words.next().unwrap().parse::<i32>().unwrap();
+    let to_room = words.next().unwrap().parse::<i32>().unwrap();
 
     RoomDirectionData {
         general_description,
@@ -341,31 +445,6 @@ fn setup_dir<R: Read>(reader: &mut BufReader<R>) -> RoomDirectionData {
         key,
         to_room,
      }
-}
-
-fn read_number<R: Read>(reader: &mut BufReader<R>) -> i32 {
-    // TODO: make the following static
-    let re: Regex = Regex::new(r"\s*#(\d+)").expect("read_number regex");
-
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
-    let cap = re.captures(&mut line).unwrap();
-    cap[1].parse::<i32>().unwrap()
-}
-
-fn fread_string<R: Read>(reader: &mut BufReader<R>) -> String {
-    let mut string = String::new();
-    loop {
-        reader.read_line(&mut string).expect("fread_string");
-        match string.find('~') {
-            None => (),
-            Some(offset) => {
-                string.drain(offset..);
-                break;
-            },
-        }
-    }
-    string
 }
 
 #[cfg(test)]

@@ -10,10 +10,7 @@ pub fn build_help_index(file: &mut File) -> HashMap<String, u64> {
 
     loop {
         let pos = file.seek(SeekFrom::Current(0)).expect("seek");
-        let mut buf = String::new();
-        if !fgets(&mut buf, 80, file) {
-            break;
-        }
+        let buf = fgets(80, file).unwrap();
         let mut scan: &str = &buf[0..];
         loop {
             let result = one_word(&scan);
@@ -27,14 +24,14 @@ pub fn build_help_index(file: &mut File) -> HashMap<String, u64> {
             table.insert(word, pos);
         }
 
-        let mut tmp_buf = String::new();
+        let mut tmp_buf;
         loop {
-            tmp_buf.clear();
-            if !fgets(&mut tmp_buf, 80, file) || tmp_buf.chars().nth(0) == Some('#') {
+            tmp_buf = fgets(80, file).unwrap();
+            if tmp_buf.chars().nth(0) == Some('#') {
                 break;
             }
         }
-        if tmp_buf.chars().nth(1) == Some('#') {
+        if tmp_buf.chars().nth(1) == Some('~') {
             break;
         }
     }
@@ -85,9 +82,10 @@ fn starting_whitespace(argument: &str) -> usize {
 }
 
 // c fgets equivalent, except max is the number of characters to read, not characters + 1
-fn fgets(dst: &mut String, max: usize, fp: &mut File) -> bool {
+pub fn fgets(max: usize, fp: &mut File) -> Option<String> {
     let mut c: [u8; 1] = [0; 1];
     let mut p: Vec<u8> = Vec::new();
+    let mut dst = String::new();
 
     while max != 0 {
         if fp.read_exact(&mut c).is_err() {
@@ -100,12 +98,12 @@ fn fgets(dst: &mut String, max: usize, fp: &mut File) -> bool {
     }
 
     if p.len() == 0 {
-        return false;
+        return None;
     }
     
     dst.push_str(&String::from_utf8(p).expect("Invalid UTF-8"));
 
-    return true;
+    return Some(dst);
 }
 
 #[cfg(test)]

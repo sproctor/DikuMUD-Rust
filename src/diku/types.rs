@@ -1,10 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::mem::transmute;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 use std::vec::Vec;
+
 use enum_map::EnumMap;
-use libc::c_int;
+use libc::{c_int, time_t};
 
 use diku::constants;
 
@@ -105,20 +106,20 @@ bitflags! {
 }
 
 pub struct ExtraDescrData {
-    keyword: String,        // Keyword in look/examine
-    description: String,    // What to see
+    pub keyword: String,        // Keyword in look/examine
+    pub description: String,    // What to see
 }
 
 pub struct ObjFlagData {
-    container_flags: ContainerFlags,
-    type_flag: ItemType,                // Type of item
-    wear_flags: WearFlags,              // Where you can wear it
-    extra_flags: ItemExtraFlags,        // If it hums, glows, etc
-    weight: u32,                        // Derr...
-    cost: u32,                          // Value when sold (gp.)
-    cost_per_day: u32,                  // Cost to keep pr. real day
-    timer: u32,                         // Timer for object
-    bitvector: u64,                     // To set chars bits
+    container_flags:    ContainerFlags,
+    type_flag:          ItemType,           // Type of item
+    wear_flags:         WearFlags,          // Where you can wear it
+    extra_flags:        ItemExtraFlags,     // If it hums, glows, etc
+    weight:             u32,                // Derr...
+    cost:               u32,                // Value when sold (gp.)
+    cost_per_day:       u32,                // Cost to keep pr. real day
+    timer:              u32,                // Timer for object
+    bitvector:          u64,                // To set chars bits
 }
 
 pub struct ObjAffectedType {
@@ -127,18 +128,18 @@ pub struct ObjAffectedType {
 }
 
 pub struct ObjData {
-    item_number:    u16,            // Where in database
-    in_room:        Option<u16>,    // In what room. None when conta/carr
-    obj_flags:      ObjFlagData,    // Object information
-    affected:       [ObjAffectedType; constants::MAX_OBJ_AFFECT],  // Which abilities in PC to change
-    name:           String,         // Title of object :get etc
-    description:    String,         // When in room
-    short_description:  String,     // When worn/carry/in cont.
-    action_description: String,     // What to write when used
-    ex_description: Vec<ExtraDescrData>,    // extra descriptions
-    carried_by:     Option<Rc<CharData>>,   // Carried by. None in room/conta
-    in_obj:         Option<Rc<ObjData>>,    // In what object. None when none
-    contains:       Vec<Rc<ObjData>>,       // Contains objects
+    item_number:        u16,                    // Where in database
+    in_room:            Option<u16>,            // In what room. None when conta/carr
+    obj_flags:          ObjFlagData,            // Object information
+    affected:           [ObjAffectedType; constants::MAX_OBJ_AFFECT],  // Which abilities in PC to change
+    name:               String,                 // Title of object :get etc
+    description:        String,                 // When in room
+    short_description:  String,                 // When worn/carry/in cont.
+    action_description: String,                 // What to write when used
+    ex_description:     Vec<ExtraDescrData>,    // extra descriptions
+    carried_by:         Option<Rc<CharData>>,   // Carried by. None in room/conta
+    in_obj:             Option<Rc<ObjData>>,    // In what object. None when none
+    contains:           Vec<Rc<ObjData>>,       // Contains objects
 }
 
 // For 'room_flags'
@@ -157,13 +158,28 @@ bitflags! {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Direction {
-    North,
+    North = 0,
     East,
     South,
     West,
     Up,
     Down,
+}
+
+impl From<u8> for Direction {
+    fn from(n: u8) -> Direction {
+        match n {
+            0 => Direction::North,
+            1 => Direction::East,
+            2 => Direction::South,
+            3 => Direction::West,
+            4 => Direction::Up,
+            5 => Direction::Down,
+            _ => panic!("Invalid direction number {}", n),
+        }
+    }
 }
 
 bitflags! {
@@ -178,7 +194,7 @@ bitflags! {
 }
 
 pub enum SectorType {
-    Inside,
+    Inside = 0,
     City,
     Field,
     Forest,
@@ -199,23 +215,23 @@ pub struct RoomDirectionData {
     pub general_description:    String,     // When look DIR.
     pub keyword:                String,     // for open/close
     pub exit_info:              ExitFlags,  // Exit info
-    pub key:                    i16,        // Key's number (-1 for no key)
-    pub to_room:                i16,        // Where direction leads (NOWHERE)
+    pub key:                    i32,        // Key's number (-1 for no key)
+    pub to_room:                i32,        // Where direction leads (NOWHERE)
 }
 
 pub struct RoomData {
-    number:         i16,        // Rooms number
-    zone:           i16,        // Room zone (for resetting)
-    sector_type:    SectorType, // sector type (move/hide)
-    name:           String,     // Rooms name 'You are ...'
-    description:    String,     // Shown when entered
-    ex_description: Vec<ExtraDescrData>,    // for examine/look
-    dir_option:     [RoomDirectionData; 6], // Directions
-    room_flags:     RoomFlags,  // DEATH, DARK, etc
-    light:          u8,         // Number of lightsources in room
-    funct:          fn(i32),    // special procedure
-    contents:       Vec<Rc<ObjData>>,   // List of items in room
-    people:         Vec<Rc<CharData>>,  // List of NPC / PC in room
+    pub number:         u32,                // Rooms number
+    pub zone:           usize,              // Room zone (for resetting)
+    pub sector_type:    SectorType,         // sector type (move/hide)
+    pub name:           String,             // Rooms name 'You are ...'
+    pub description:    String,             // Shown when entered
+    pub ex_description: Vec<ExtraDescrData>,    // for examine/look
+    pub dir_option:     HashMap<Direction, RoomDirectionData>, // Directions
+    pub room_flags:     RoomFlags,          // DEATH, DARK, etc
+    pub light:          u8,                 // Number of lightsources in room
+    pub funct:          Option<fn(i32)>,    // special procedure
+    pub contents:       Vec<Rc<ObjData>>,   // List of items in room
+    pub people:         Vec<Rc<CharData>>,  // List of NPC / PC in room
 }
 
 // The following defs and structures are related to CharData
@@ -253,6 +269,7 @@ pub enum Condition {
 
 // Bitvector for 'affected_by'
 bitflags! {
+    #[derive(Serialize, Deserialize)]
     pub struct AffectedFlags: u32 {
         const AFF_BLIND             = 1 << 0;
         const AFF_INVISIBLE         = 1 << 1;
@@ -280,6 +297,7 @@ bitflags! {
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub enum AbilityModifier {
     None,
     Str,
@@ -399,6 +417,7 @@ pub struct CharPlayerData {
 }
 
 // used in CHAR_FILE_U *DO*NOT*CHANGE*
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharAbilityData {
     stren:      i8,
     str_add:    i8,     // 000 - 100 if strength 18
@@ -409,6 +428,7 @@ pub struct CharAbilityData {
 }
 
 // Used in CHAR_FILE_U DO NOT CHANGE
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharPointData {
     mana:       i16,
     max_mana:   i16, // Not useable may be erased upon player file renewal
@@ -445,12 +465,14 @@ pub struct CharSpecialData {
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharSkillData {
     learned:    i8,
     recognise:  bool,
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct AffectedType {
     spell_type:     i8,     // The type of spell that caused this
     duration:       i16,    // For how long its effects will last
@@ -509,36 +531,37 @@ pub struct WeatherData {
 // *  file element for player file. BEWARE: Changing it will ruin the file  *
 // **************************************************************************
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharFileU {
-    sex:        i8,
-    class:      i8,
-    level:      i8,
-    birth:      i64,        // Time of birth of character
-    played:     i32,        // Number of secs played in total
-    weight:     u8,
-    height:     u8,
-    title:      [u8; 80],
-    hometown:   i16,
-    description:    [u8; 240],
-    talks:      [bool; constants::MAX_TOUNGE],
-    load_room:  i16,        // Which room to place char in
-    abilities:  CharAbilityData,
-    points:     CharPointData,
-    skills:     [CharSkillData; constants::MAX_SKILLS],
-    affected:   [AffectedType; constants::MAX_AFFECT],
+    pub sex:            i8,
+    pub class:          i8,
+    pub level:          i8,
+    pub birth:          time_t,     // Time of birth of character
+    pub played:         i32,        // Number of secs played in total
+    pub weight:         u8,
+    pub height:         u8,
+    pub title:          [[u8; 20]; 4],
+    pub hometown:       i16,
+    pub description:    [[u8; 24]; 10],
+    pub talks:          [bool; constants::MAX_TOUNGE],
+    pub load_room:      u32,        // Which room to place char in
+    pub abilities:      CharAbilityData,
+    pub points:         CharPointData,
+    pub skills:         ([CharSkillData; 32], [CharSkillData; constants::MAX_SKILLS - 32]),
+    pub affected:       [AffectedType; constants::MAX_AFFECT],
 
     // specials
 
-    spells_to_learn:    i8,
-    alignmen:           i32,
-    last_logon:         i64,    // Time (in secs) of last logon
-    act:                u8,     // ACT Flags
+    pub spells_to_learn:    i8,
+    pub alignmen:           i32,
+    pub last_logon:         i64,    // Time (in secs) of last logon
+    pub act:                u8,     // ACT Flags
 
     // char data
-    name:           [u8; 20],
-    pwd:            [u8; 11],
-    apply_saving_throw: [i16; 5],
-    conditions:     [i32; 3],
+    pub name:               [u8; 20],
+    pub pwd:                [u8; 11],
+    pub apply_saving_throw: [i16; 5],
+    pub conditions:         [i32; 3],
 }
 
 // **************************************************************************
@@ -611,9 +634,9 @@ pub struct DescriptorData {
 }
 
 pub struct MsgType {
-    attacker_msg:   String, // message to attacker
-    victim_msg:     String, // message to victim
-    room_msg:       String, // message to room
+    pub attacker_msg:   String, // message to attacker
+    pub victim_msg:     String, // message to victim
+    pub room_msg:       String, // message to room
 }
 
 pub struct MessageType {
@@ -624,11 +647,11 @@ pub struct MessageType {
     god_msg:        MsgType,    // messages when hit on god
 }
 
-pub struct MessageList {
-    a_type:             i32,                // Attack type
-    number_of_attacks:  i32,                // How many attack messages to chose from
-    msg:                Vec<MessageType>,   // List of messages
-}
+//pub struct MessageList {
+//    pub a_type:             i32,                // Attack type
+//    pub number_of_attacks:  i32,                // How many attack messages to chose from
+//    pub msg:                Vec<MessageType>,   // List of messages
+//}
 
 pub struct DexSkillType {
     p_pocket:   i16,

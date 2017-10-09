@@ -1,7 +1,5 @@
-#[macro_use]
-extern crate bitflags;
-#[macro_use]
-extern crate enum_map;
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate enum_map;
 extern crate libc;
 extern crate getopts;
 extern crate rand;
@@ -10,6 +8,8 @@ extern crate nix;
 extern crate chan;
 extern crate chan_signal;
 extern crate regex;
+#[macro_use] extern crate serde_derive;
+extern crate bincode;
 
 use std::env;
 use std::path::Path;

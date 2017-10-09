@@ -5,7 +5,7 @@ pub const WAIT_ROUND: u64           = 4;
 
 pub const MAX_STRING_LENGTH: usize  = 4096;
 pub const MAX_INPUT_LENGTH: usize   = 80;
-pub const MAX_MESSAGES: usize       = 60;
+// pub const MAX_MESSAGES: usize       = 60;
 pub const MAX_ITEMS: usize          = 153;
 
 pub const SECS_PER_REAL_MIN: u64    = 60;

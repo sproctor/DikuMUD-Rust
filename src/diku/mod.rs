@@ -1,6 +1,7 @@
 
 pub mod comm;
 pub mod constants;
+pub mod fight;
 pub mod game;
 pub mod interpreter;
 pub mod modify;
