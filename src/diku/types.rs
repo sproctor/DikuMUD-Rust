@@ -12,9 +12,10 @@ use diku::constants;
 // The following definitions are for ObjData
 
 // for 'type_flag'
+#[derive(Eq, PartialEq)]
 pub enum ItemType {
     Light,
-    croll,
+    Scroll,
     Wand,
     Staff,
     Weapon,
@@ -105,11 +106,13 @@ bitflags! {
     }
 }
 
+#[derive(Eq, PartialEq)]
 pub struct ExtraDescrData {
     pub keyword: String,        // Keyword in look/examine
     pub description: String,    // What to see
 }
 
+#[derive(Eq, PartialEq)]
 pub struct ObjFlagData {
     container_flags:    ContainerFlags,
     type_flag:          ItemType,           // Type of item
@@ -122,11 +125,13 @@ pub struct ObjFlagData {
     bitvector:          u64,                // To set chars bits
 }
 
+#[derive(Eq, PartialEq)]
 pub struct ObjAffectedType {
     location: u8,   // Which ability to change (APPLY_XXX)
     modifier: u16,  // How much it changes by
 }
 
+#[derive(Eq, PartialEq)]
 pub struct ObjData {
     item_number:        u16,                    // Where in database
     in_room:            Option<u16>,            // In what room. None when conta/carr
@@ -297,7 +302,7 @@ bitflags! {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
 pub enum AbilityModifier {
     None,
     Str,
@@ -337,6 +342,7 @@ pub enum SavingThrowModifier {
 }
 
 // 'class' for PC's
+#[derive(Eq, PartialEq)]
 pub enum Class {
     MagicUser,
     Cleric,
@@ -345,6 +351,7 @@ pub enum Class {
 }
 
 // sex
+#[derive(Eq, PartialEq)]
 pub enum Sex {
     Neutral,
     Male,
@@ -352,6 +359,7 @@ pub enum Sex {
 }
 
 // positions
+#[derive(Eq, PartialEq)]
 pub enum Position {
     Dead,
     MortallyW,
@@ -393,12 +401,14 @@ pub struct TimeInfoData {
     pub year:   u16,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct TimeData {
     birth:  SystemTime, // This represents the characters age
     logon:  SystemTime, // Time of last logon (used to calculate played)
     played: Duration,   // This is the total accumulated time played in secs
 }
 
+#[derive(Eq, PartialEq)]
 pub struct CharPlayerData {
     name:           String, // PC / NPC s name (kill ... )
     short_descr:    String, // for 'actions'
@@ -417,7 +427,7 @@ pub struct CharPlayerData {
 }
 
 // used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharAbilityData {
     stren:      i8,
     str_add:    i8,     // 000 - 100 if strength 18
@@ -428,7 +438,7 @@ pub struct CharAbilityData {
 }
 
 // Used in CHAR_FILE_U DO NOT CHANGE
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharPointData {
     mana:       i16,
     max_mana:   i16, // Not useable may be erased upon player file renewal
@@ -443,6 +453,7 @@ pub struct CharPointData {
     damroll:    i8,     // Any bonus or penalty to the damage roll
 }
 
+#[derive(Eq, PartialEq)]
 pub struct CharSpecialData {
     fighting:           Option<Rc<CharData>>,   // Opponent
     hunting:            Option<Rc<CharData>>,   // Hunting person..
@@ -465,14 +476,14 @@ pub struct CharSpecialData {
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharSkillData {
     learned:    i8,
     recognise:  bool,
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
 pub struct AffectedType {
     spell_type:     i8,     // The type of spell that caused this
     duration:       i16,    // For how long its effects will last
@@ -482,24 +493,25 @@ pub struct AffectedType {
 }
 
 // ================== Structure for player/non-player =====================
+#[derive(Eq, PartialEq)]
 pub struct CharData {
-    nr:             i16,                // monster nr (pos in file)
-    in_room:        i16,                // Location
-    player:         CharPlayerData,     // Normal data
-    abilities:      CharAbilityData,    // Abilities
-    tmpabilities:   CharAbilityData,    // The abilities we use
-    points:         CharPointData,      // Points
-    specials:       CharSpecialData,    // Special plaing constants
-    skills:         [CharSkillData; constants::MAX_SKILLS], // Skills
+    pub nr:             u64,                // monster nr (pos in file)
+    pub in_room:        u32,                // Location
+    pub player:         CharPlayerData,     // Normal data
+    pub abilities:      CharAbilityData,    // Abilities
+    pub tmpabilities:   CharAbilityData,    // The abilities we use
+    pub points:         CharPointData,      // Points
+    pub specials:       CharSpecialData,    // Special plaing constants
+    pub skills:         Vec<CharSkillData>, // Skills
 
-    affected:       Vec<AffectedType>,  // affected by what spells
-    equipment:      EnumMap<EquipmentPosition, Rc<ObjData>>, // Equipment array
+    pub affected:       Vec<AffectedType>,  // affected by what spells
+    pub equipment:      EnumMap<EquipmentPosition, Rc<ObjData>>, // Equipment array
 
-    carrying:       Vec<Rc<ObjData>>,
-    desc:           Option<DescriptorData>, // None for mobiles
+    pub carrying:       Vec<Rc<ObjData>>,
+    pub desc:           Option<DescriptorData>, // None for mobiles
 
-    followers:      Vec<Rc<CharData>>,  // List of char followers
-    master:         Option<Rc<CharData>>,   // Who is char following?
+    pub followers:      Vec<Rc<CharData>>,  // List of char followers
+    pub master:         Option<Rc<CharData>>,   // Who is char following?
 }
 
 /* ======================================================================== */
@@ -590,6 +602,7 @@ pub struct ObjFileU {
 // *  The following structures are related to descriptor_data   *
 // **************************************************************
 
+#[derive(Eq, PartialEq)]
 pub enum ConnectionMode {
     Plying,
     Nme,
@@ -607,11 +620,13 @@ pub enum ConnectionMode {
     PwdNCnf,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct SnoopData {
     snooping:   Rc<CharData>,
     snoop_by:   Rc<CharData>,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct DescriptorData {
     descriptor: c_int,
     host:       String,
@@ -624,8 +639,8 @@ pub struct DescriptorData {
     // str
     // max_str
     prompt_mode:    i32,
-    buf:            [u8; constants::MAX_STRING_LENGTH],
-    last_input:     [u8; constants::MAX_INPUT_LENGTH],
+    buf:            Vec<u8>,
+    last_input:     Vec<u8>,
     pub output:     VecDeque<String>,   // q of strings to send
     pub input:      VecDeque<String>,   // q of unprocessed input
     character:      Rc<CharData>,       // linked to char
@@ -762,3 +777,16 @@ pub struct PoseType {
     pub poser_msg:  [String; 4],
     pub room_msg:   [String; 4],
 }
+
+#[derive(Eq, PartialEq)]
+pub enum VictimType {
+    ToRoom,
+    ToVict,
+    ToNotVict,
+    ToChar,
+}
+
+pub type RoomTable = HashMap<u32, RoomData>;
+pub type ZoneTable = Vec<ZoneData>;
+pub type FilePosTable = HashMap<String, u64>;
+pub type IndexTable = HashMap<u32, IndexData>;

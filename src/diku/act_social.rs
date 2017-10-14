@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
-use std::mem::uninitialized;
 
 use diku::constants::{POSEMESS_FILE, SOCMESS_FILE};
 use diku::types::{PoseType, SocialMessg};
