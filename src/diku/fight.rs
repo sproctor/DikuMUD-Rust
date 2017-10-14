@@ -14,22 +14,27 @@ pub fn load_messages() -> HashMap<u32, Vec<MessageType>> {
     
     let mut fight_messages = HashMap::new();
 
-    let chk = trim_line(&mut reader);
-    while chk.chars().nth(0) == Some('M') {
+    while trim_line(&mut reader).chars().nth(0) == Some('M') {
         let a_type = trim_line(&mut reader).parse::<u32>().unwrap();
-        let mut message_list = get_message_list(&mut fight_messages, a_type);
+        let message_list = fight_messages.entry(a_type).or_insert(Vec::new());
 
+        let die_msg = read_msgs(&mut reader);
+        let miss_msg = read_msgs(&mut reader);
+        let hit_msg = read_msgs(&mut reader);
+        let god_msg = read_msgs(&mut reader);
 
+        message_list.push(MessageType {
+            die_msg,
+            miss_msg,
+            hit_msg,
+            god_msg,
+        });
     }
 
     fight_messages
 }
 
-fn get_message_list<'a>(messages: &'a mut HashMap<u32, Vec<MessageType>>, a_type: u32) -> &'a mut Vec<MessageType> {
-    messages.entry(a_type).or_insert(Vec::new())
-}
-
-fn read_message<R: Read>(reader: &mut BufReader<R>) -> MsgType {
+fn read_msgs<R: Read>(reader: &mut BufReader<R>) -> MsgType {
     let attacker_msg = fread_string(reader);
     let victim_msg = fread_string(reader);
     let room_msg = fread_string(reader);

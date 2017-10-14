@@ -57,7 +57,7 @@ fn main() {
 
     log(&format!("Running game on port {}", port));
 
-    assert!(env::set_current_dir(Path::new(&dir)).is_ok());
+    env::set_current_dir(Path::new(&dir)).unwrap();
     log(&format!("Using {} as data directory.", dir));
 
     run_the_game(port, lawful, no_specials);

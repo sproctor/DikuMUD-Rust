@@ -1,10 +1,11 @@
-use std::io::BufReader;
 use std::io::prelude::*;
+use std::io::{BufReader, Seek, SeekFrom};
+use std::io::ErrorKind;
+use std::str::FromStr;
 use std::time::Duration;
 
 use rand::distributions::{IndependentSample, Range};
 use rand;
-use regex::Regex;
 use time;
 
 use diku::types;
@@ -50,14 +51,48 @@ pub fn mud_time_passed(duration: Duration) -> types::TimeInfoData {
     }
 }
 
-pub fn read_number<R: Read>(reader: &mut BufReader<R>) -> u32 {
-    // TODO: make the following static
-    let re: Regex = Regex::new(r"\s*#(\d+)").expect("read_number regex");
+pub fn read_char<R: Read>(reader: &mut BufReader<R>) -> u8 {
+    let mut b = [0; 1];
 
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
-    let cap = re.captures(&mut line).unwrap();
-    cap[1].parse::<u32>().unwrap()
+    reader.read_exact(&mut b).unwrap();
+    while b[0] == b' ' || b[0] == b'\t' || b[0] == b'\r' || b[0] == b'\n' {
+        reader.read_exact(&mut b).unwrap();
+    }
+    b[0]
+}
+
+pub fn read_number<R: Read + Seek, F: FromStr>(reader: &mut BufReader<R>, clear: bool) -> Result<F, <F as FromStr>::Err> {
+    let mut b = [0; 1];
+    let mut buf = Vec::new();
+
+    // trim preceding whitespace
+    reader.read_exact(&mut b).unwrap();
+    while b[0] == b' ' || b[0] == b'\t' || b[0] == b'\r' || b[0] == b'\n' {
+        reader.read_exact(&mut b).unwrap();
+    }
+
+    // carry over byte from previous read
+    while (b[0] >= b'0' && b[0] <= b'9') || b[0] == b'-' {
+        buf.push(b[0]);
+        match reader.read(&mut b) {
+            Ok(0) => break,
+            Ok(_) => (),
+            Err(e) => if e.kind() == ErrorKind::Interrupted { continue } else { panic!("{}", e) },
+        }
+    }
+
+    // trim trailing whitespace
+    while clear && (b[0] == b' ' || b[0] == b'\t' || b[0] == b'\r' || b[0] == b'\n') {
+        match reader.read(&mut b) {
+            Ok(0) => break,
+            Ok(_) => continue,
+            Err(e) => if e.kind() == ErrorKind::Interrupted { continue } else { panic!("{}", e) },
+        }
+    }
+    
+    reader.seek(SeekFrom::Current(-1)).unwrap();
+
+    String::from_utf8(buf).unwrap().parse()
 }
 
 pub fn fread_string<R: Read>(reader: &mut BufReader<R>) -> String {

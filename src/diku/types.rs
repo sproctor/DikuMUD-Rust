@@ -640,11 +640,11 @@ pub struct MsgType {
 }
 
 pub struct MessageType {
-    die_msg:        MsgType,    // messages when death
-    miss_msg:       MsgType,    // messages when miss
-    hit_msg:        MsgType,    // messages when hit
-    sanctuary_msg:  MsgType,    // messages when hit on sanctuary
-    god_msg:        MsgType,    // messages when hit on god
+    pub die_msg:        MsgType,    // messages when death
+    pub miss_msg:       MsgType,    // messages when miss
+    pub hit_msg:        MsgType,    // messages when hit
+    // sanctuary_msg:  MsgType,    // messages when hit on sanctuary (unused -sproctor)
+    pub god_msg:        MsgType,    // messages when hit on god
 }
 
 //pub struct MessageList {
@@ -692,4 +692,73 @@ pub enum MessageTarget {
     ToVict,
     ToNotVict,
     ToChar,
+}
+
+pub enum ResetMode {
+    DoNot,  // Don't reset, and don't update age.
+    NoPC,   // Reset if no PC's are located in zone.
+    Do,     // Just reset.
+}
+
+pub struct ResetCom {
+    pub command:    u8,     // current command
+    pub if_flag:    bool,   // if TRUE: exe only if preceding exe'd
+    pub arg1:       i32,    //
+    pub arg2:       i32,    // Arguments to the command
+    pub arg3:       i32,    //
+
+    // Commands:
+    // 'M': Read a mobile
+    // 'O': Read an object
+    // 'G': Give obj to mob
+    // 'P': Put obj in obj
+    // 'G': Obj to char (What?!? 'G' is above -Sean)
+    // 'E': Obj to char equip
+    // 'D': Set state of door
+}
+
+pub struct ZoneData {
+    pub name:       String,         // name of this zone
+    pub lifespan:   u32,            // how long between resets (minutes)
+    pub age:        u32,            // current age of this zone (minutes)
+    pub top:        u32,            // upper limit for rooms in this zone
+
+    pub reset_mode: ResetMode,      // conditions for reset
+    pub cmd:        Vec<ResetCom>,  // command table for reset
+}
+
+// element in monster and object index-tables
+pub struct IndexData {
+    //pub virtual_nr: u32,
+    pub pos:        u64,
+    pub number:     u32,
+    pub func:       Option<fn(&mut CharData, i32, str) -> i32>,
+}
+
+pub struct SocialMessg {
+    pub act_nr:                 i32,
+    pub hide:                   i32,
+    pub min_victim_position:    i32,    // Position of victim
+
+    // No argument was supplied
+    pub char_no_arg:            Option<String>,
+    pub others_no_arg:          Option<String>,
+
+    // An argument was there, and a victim was found
+    pub char_found:             Option<String>, // if NULL, read no further, ignore args
+    pub others_found:           Option<String>,
+    pub vict_found:             Option<String>,
+
+    // An argument was there, but no victim was found
+    pub not_found:              Option<String>,
+
+    // The victim turned out to be the character
+    pub char_auto:              Option<String>,
+    pub others_auto:            Option<String>,
+}
+
+pub struct PoseType {
+    pub level:      i32,    // minimum level for poser
+    pub poser_msg:  [String; 4],
+    pub room_msg:   [String; 4],
 }

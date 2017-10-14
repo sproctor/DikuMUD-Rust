@@ -1,16 +1,16 @@
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::prelude::*;
-use std::io::SeekFrom;
+use std::io::{BufReader, SeekFrom};
 
 use diku::interpreter::fill_word;
 
-pub fn build_help_index(file: &mut File) -> HashMap<String, u64> {
+pub fn build_help_index<R: Read + Seek>(reader: &mut BufReader<R>) -> HashMap<String, u64> {
     let mut table = HashMap::new();
 
     loop {
-        let pos = file.seek(SeekFrom::Current(0)).expect("seek");
-        let buf = fgets(80, file).unwrap();
+        let pos = reader.seek(SeekFrom::Current(0)).expect("seek");
+        let mut buf = String::new();
+        reader.read_line(&mut buf).unwrap();
         let mut scan: &str = &buf[0..];
         loop {
             let result = one_word(&scan);
@@ -24,9 +24,10 @@ pub fn build_help_index(file: &mut File) -> HashMap<String, u64> {
             table.insert(word, pos);
         }
 
-        let mut tmp_buf;
+        let mut tmp_buf = String::new();
         loop {
-            tmp_buf = fgets(80, file).unwrap();
+            tmp_buf.clear();
+            reader.read_line(&mut tmp_buf).unwrap();
             if tmp_buf.chars().nth(0) == Some('#') {
                 break;
             }
@@ -79,31 +80,6 @@ fn starting_whitespace(argument: &str) -> usize {
     }
     // string is all whitespace
     return pos;
-}
-
-// c fgets equivalent, except max is the number of characters to read, not characters + 1
-pub fn fgets(max: usize, fp: &mut File) -> Option<String> {
-    let mut c: [u8; 1] = [0; 1];
-    let mut p: Vec<u8> = Vec::new();
-    let mut dst = String::new();
-
-    while max != 0 {
-        if fp.read_exact(&mut c).is_err() {
-            break;
-        }
-        p.push(c[0]);
-        if c[0] == b'\n' {
-            break;
-        }
-    }
-
-    if p.len() == 0 {
-        return None;
-    }
-    
-    dst.push_str(&String::from_utf8(p).expect("Invalid UTF-8"));
-
-    return Some(dst);
 }
 
 #[cfg(test)]

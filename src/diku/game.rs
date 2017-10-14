@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, SeekFrom};
@@ -12,52 +13,13 @@ use chan::Receiver;
 use chan_signal;
 use chan_signal::Signal;
 
+use diku::act_social::{boot_pose_messages, boot_social_messages};
 use diku::constants;
 use diku::fight::load_messages;
-use diku::modify::{build_help_index, fgets};
+use diku::modify::{build_help_index};
+use diku::spec_assign::assign_mobiles;
 use diku::types::*;
-use diku::utility::{dice, fread_string, log, mud_time_passed, read_number};
-
-enum ResetMode {
-    DoNot,  // Don't reset, and don't update age.
-    NoPC,   // Reset if no PC's are located in zone.
-    Do,     // Just reset.
-}
-
-struct ResetCom {
-    command:    u8,     // current command
-    if_flag:    bool,   // if TRUE: exe only if preceding exe'd
-    arg1:       i32,    //
-    arg2:       i32,    // Arguments to the command
-    arg3:       i32,    //
-
-    // Commands:
-    // 'M': Read a mobile
-    // 'O': Read an object
-    // 'G': Give obj to mob
-    // 'P': Put obj in obj
-    // 'G': Obj to char (What?!? 'G' is above -Sean)
-    // 'E': Obj to char equip
-    // 'D': Set state of door
-}
-
-struct ZoneData {
-    name:       String,         // name of this zone
-    lifespan:   u32,            // how long between resets (minutes)
-    age:        u32,            // current age of this zone (minutes)
-    top:        u32,            // upper limit for rooms in this zone
-
-    reset_mode: ResetMode,      // conditions for reset
-    cmd:        Vec<ResetCom>,  // command table for reset
-}
-
-// element in monster and object index-tables
-struct IndexData {
-    virtual_nr: u32,
-    pos:        u64,
-    number:     u32,
-    func:       Option<fn(i32)>,
-}
+use diku::utility::{dice, fread_string, log, mud_time_passed, read_char, read_number};
 
 pub static TICS: AtomicUsize = ATOMIC_USIZE_INIT;
 
@@ -80,12 +42,14 @@ pub struct Game {
     obj_f:              File,
     help_f:             Option<File>,
     help_index:         HashMap<String, u64>,
-    mob_index:          Vec<IndexData>,
-    obj_index:          Vec<IndexData>,
+    mob_index:          HashMap<u32, IndexData>,
+    obj_index:          HashMap<u32, IndexData>,
     player_table:       HashMap<String, u64>,
     zone_table:         Vec<ZoneData>,
     world:              HashMap<u32, RoomData>,
     fight_messages:     HashMap<u32, Vec<MessageType>>,
+    soc_mess_list:      Vec<SocialMessg>,
+    pose_messages:      Vec<PoseType>,
     shutdown_signal:    Receiver<Signal>,
     hup_signal:         Receiver<Signal>,
     log_signal:         Receiver<Signal>,
@@ -105,12 +69,12 @@ impl Game {
 
         log("Opening mobile, object and help files.");
 
-        let mut mob_f = File::open(constants::MOB_FILE).expect("boot");
-        let mut obj_f = File::open(constants::OBJ_FILE).expect("boot");
-        let mut help_f = File::open(constants::HELP_KWRD_FILE).ok();
-        let help_index = match help_f.as_mut() {
+        let mob_f = File::open(constants::MOB_FILE).expect("boot");
+        let obj_f = File::open(constants::OBJ_FILE).expect("boot");
+        let help_f = File::open(constants::HELP_KWRD_FILE).ok();
+        let help_index = match help_f.as_ref() {
             None => HashMap::new(),
-            Some(file) => build_help_index(file),
+            Some(file) => build_help_index(&mut BufReader::new(file)),
         };
 
         log("Loading zone table.");
@@ -121,9 +85,11 @@ impl Game {
 
         // Using a hash table instead of renumbering rooms -sproctor
 
-        log("Generating index tables for mobile and object files.");
-	    let mob_index = generate_indices(&mut mob_f);
-	    let obj_index = generate_indices(&mut obj_f);
+        log("Generating index tables for mobile files.");
+	    let mut mob_index = generate_indices(&mut BufReader::new(&mob_f));
+
+        log("Generating index tables for object files.");
+	    let obj_index = generate_indices(&mut BufReader::new(&obj_f));
 
         // skip renumbering zone table - sproctor
 
@@ -132,6 +98,18 @@ impl Game {
 
         log("Loading fight messages.");
 	    let fight_messages = load_messages();
+
+        log("Loading social messages.");
+	    let soc_mess_list = boot_social_messages();
+
+        log("Loading pose messages.");
+	    let pose_messages = boot_pose_messages();
+
+        log("Assigning function pointers:");
+        if !no_specials {
+            log("   Mobiles.");
+            assign_mobiles(&mut mob_index);
+        }
 
         let mut game = Game {
             descriptor_list: Vec::new(),
@@ -163,6 +141,8 @@ impl Game {
             zone_table,
             world,
             fight_messages,
+            soc_mess_list,
+            pose_messages,
             shutdown_signal: chan_signal::notify(&[Signal::USR2]),
             hup_signal: chan_signal::notify(&[Signal::HUP, Signal::INT, Signal::TERM]),
             log_signal: chan_signal::notify(&[Signal::ALRM]),
@@ -245,19 +225,21 @@ fn build_player_index() -> HashMap<String, u64> {
 }
 
 // generate index table for object or monster file
-fn generate_indices(file: &mut File) -> Vec<IndexData> {
-    let mut index = Vec::new();
+fn generate_indices<R: Read + Seek>(reader: &mut BufReader<R>) -> HashMap<u32, IndexData> {
+    let mut index = HashMap::new();
 
-    file.seek(SeekFrom::Start(0)).unwrap();
+    // This is unneeded -sproctor
+    reader.seek(SeekFrom::Start(0)).unwrap();
 
     loop {
-        let buf = fgets(80, file).unwrap();
+        let mut buf = String::new();
+        reader.read_line(&mut buf).unwrap();
         match buf.chars().nth(0).unwrap() {
             '#' => {
-                let virtual_nr = buf.get(1..).unwrap().parse::<u32>().unwrap();
-                let pos = file.seek(SeekFrom::Current(0)).unwrap();
-                index.push(IndexData {
-                    virtual_nr,
+                let virtual_nr = buf.get(1..).unwrap().trim().parse::<u32>().unwrap();
+                let pos = reader.seek(SeekFrom::Current(0)).unwrap();
+                index.insert(virtual_nr, IndexData {
+                    //virtual_nr,
                     pos,
                     number: 0,
                     func: None,
@@ -285,22 +267,19 @@ fn boot_zones() -> Vec<ZoneData> {
     let mut reader = BufReader::new(file);
 
     loop {
-        let _ = reader.read_line(&mut String::new()); // Read and ignore "#d"
+        // ignore #nn line
+        assert_eq!(read_char(&mut reader), b'#', "Expected '#' in zone file");
+        read_number::<File, u32>(&mut reader, true).unwrap();
 
         let check = fread_string(&mut reader);
-        if check.chars().nth(0).unwrap() == '$' {
+        if check.bytes().nth(0).unwrap() == b'$' {
             // end of file
             break;
         }
 
-        let mut line = String::new();
-        if reader.read_line(&mut line).is_err() {
-            break;
-        }
-        let mut words = line.split_whitespace();
-        let top = words.next().unwrap().parse::<u32>().expect("parse zone top");
-        let lifespan = words.next().unwrap().parse::<u32>().expect("parse zone lifespan");
-        let reset_mode = match words.next().unwrap().parse::<u8>().expect("parse zone reset_mode") {
+        let top = read_number(&mut reader, true).expect("parse zone top");
+        let lifespan = read_number(&mut reader, true).expect("parse zone lifespan");
+        let reset_mode = match read_number(&mut reader, true).expect("parse zone reset_mode") {
             0 => ResetMode::DoNot,
             1 => ResetMode::NoPC,
             2 => ResetMode::Do,
@@ -309,27 +288,25 @@ fn boot_zones() -> Vec<ZoneData> {
 
         let mut cmd = Vec::new();
         loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).is_err() {
-                break;
-            }
-            let mut words = line.split_whitespace();
 
-            let command = words.next().unwrap().as_bytes()[0];
+            let command = read_char(&mut reader);
             if command == b'S' {
                 break;
             }
             if command == b'*' {
+                reader.read_line(&mut String::new()).unwrap(); // skip command
                 continue;
             }
-            let if_flag = words.next().unwrap().parse::<u8>().expect("parse zone command if_flag") != 0;
-            let arg1 = words.next().unwrap().parse::<i32>().expect("parse zone command arg1");
-            let arg2 = words.next().unwrap().parse::<i32>().expect("parse zone command arg2");
+            let if_flag = read_number::<File, u32>(&mut reader, false).expect("parse zone command if_flag") != 0;
+            let arg1 = read_number(&mut reader, false).expect("parse zone command arg1");
+            let arg2 = read_number(&mut reader, false).expect("parse zone command arg2");
             let arg3 = if command == b'M' || command == b'O' || command == b'P' || command == b'D' {
-                words.next().unwrap().parse::<i32>().expect("parse zone command arg3")
+                read_number(&mut reader, false).expect("parse zone command arg3")
             } else {
                 0
             };
+
+            reader.read_line(&mut String::new()).unwrap(); // read comment
 
             cmd.push(ResetCom {
                 command, if_flag, arg1, arg2, arg3,
@@ -356,19 +333,16 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
     let mut zone = 0;
 
     loop {
-        let virtual_nr = read_number(&mut reader);
+        assert_eq!(read_char(&mut reader), b'#', "Expected '#' in world file.");
+        let virtual_nr = read_number(&mut reader, true).unwrap();
         let temp = fread_string(&mut reader);
         if temp.bytes().nth(0).unwrap() == b'$' {
             break;
         }
-        
         let description = fread_string(&mut reader);
 
-        let mut line = String::new();
-        reader.read_line(&mut line).unwrap();
-        let mut words = line.split_whitespace();
         if !zone_table.is_empty() {
-            words.next(); // sproctor: this was originally the zone number? why is this so complicated now?
+            read_number::<File, i32>(&mut reader, true).unwrap(); // sproctor: this was originally the zone number? why is this so complicated now?
 
 			// OBS: Assumes ordering of input rooms
 
@@ -379,8 +353,8 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
                 assert!(zone < zone_table.len(), "Room {} is outside of any zone.\n", virtual_nr);
             }
         }
-        let room_flags = RoomFlags::from_bits(words.next().unwrap().parse::<u16>().unwrap()).unwrap();
-        let sector_type = SectorType::from(words.next().unwrap().parse::<u8>().unwrap());
+        let room_flags = RoomFlags::from_bits(read_number(&mut reader, true).unwrap()).unwrap();
+        let sector_type = SectorType::from(max(read_number::<File, i8>(&mut reader, true).unwrap(), 0) as u8);
 
         let mut dir_option = HashMap::new();
         let mut ex_description = Vec::new();
@@ -399,8 +373,8 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
                     let description = fread_string(&mut reader);
                     ex_description.push(ExtraDescrData { keyword, description })
                 },
-                b'$' => break,
-                _ => panic!("Invalid value in room extra fields {}", chk),
+                b'S' => break,
+                _ => panic!("Invalid value in room extra fields: {}", chk),
             }
         }
         world.insert(virtual_nr, RoomData {
@@ -422,21 +396,18 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
 }
 
 // read direction data
-fn setup_dir<R: Read>(reader: &mut BufReader<R>) -> RoomDirectionData {
+fn setup_dir<R: Read + Seek>(reader: &mut BufReader<R>) -> RoomDirectionData {
 
     let general_description = fread_string(reader);
     let keyword = fread_string(reader);
 
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
-    let mut words = line.split_whitespace();
-    let exit_info = match words.next().unwrap().parse::<u32>().unwrap() {
+    let exit_info = match read_number::<R, u32>(reader, true).unwrap() {
         1 => ExitFlags::EX_ISDOOR,
         2 => ExitFlags::EX_ISDOOR | ExitFlags::EX_PICKPROOF,
         _ => ExitFlags::empty(),
     };
-    let key = words.next().unwrap().parse::<i32>().unwrap();
-    let to_room = words.next().unwrap().parse::<i32>().unwrap();
+    let key = read_number(reader, true).unwrap();
+    let to_room = read_number(reader, true).unwrap();
 
     RoomDirectionData {
         general_description,
@@ -450,6 +421,7 @@ fn setup_dir<R: Read>(reader: &mut BufReader<R>) -> RoomDirectionData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn fread_string_test() {
