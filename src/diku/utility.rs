@@ -6,10 +6,15 @@ use std::time::Duration;
 
 use rand::distributions::{IndependentSample, Range};
 use rand;
+use rand::Rng;
 use time;
 
-use diku::types;
-use diku::constants;
+use diku::types::*;
+use diku::constants::*;
+
+pub fn number(from: i32, to: i32) -> i32 {
+    rand::thread_rng().gen_range(from, to)
+}
 
 pub fn dice(number: u32, size: u32) -> u32 {
     assert!(size >= 1);
@@ -28,22 +33,22 @@ pub fn log(s: &str) {
     eprintln!("{} :: {}", timestr, s);
 }
 
-pub fn mud_time_passed(duration: Duration) -> types::TimeInfoData {
+pub fn mud_time_passed(duration: Duration) -> TimeInfoData {
     let mut secs = duration.as_secs();
 
-    let hours = (secs / constants::SECS_PER_MUD_HOUR) % 24;
-    secs -= constants::SECS_PER_MUD_HOUR * hours;
+    let hours = (secs / SECS_PER_MUD_HOUR) % 24;
+    secs -= SECS_PER_MUD_HOUR * hours;
     // These subtractions seem useless -Sean
 
-    let day = (secs / constants::SECS_PER_MUD_DAY) % 35;
-    secs -= constants::SECS_PER_MUD_DAY * day;
+    let day = (secs / SECS_PER_MUD_DAY) % 35;
+    secs -= SECS_PER_MUD_DAY * day;
 
-    let month = (secs / constants::SECS_PER_MUD_MONTH) % 17;
-    secs -= constants::SECS_PER_MUD_MONTH * month;
+    let month = (secs / SECS_PER_MUD_MONTH) % 17;
+    secs -= SECS_PER_MUD_MONTH * month;
 
-    let year = secs / constants::SECS_PER_MUD_YEAR;
+    let year = secs / SECS_PER_MUD_YEAR;
 
-    types::TimeInfoData {
+    TimeInfoData {
         hours: hours as u8,
         day: day as u8,
         month: month as u8,
@@ -108,4 +113,25 @@ pub fn fread_string<R: Read>(reader: &mut BufReader<R>) -> String {
         }
     }
     string
+}
+
+// can subject see character "obj"?
+pub fn can_see(sub: &CharData, obj: &CharData) -> bool {
+    ((is_affected(obj, AffectedFlags::AFF_INVISIBLE)))
+}
+
+fn is_affected(ch: &CharData, skill: AffectedFlags) -> bool {
+    is_set(ch.specials.affected_by, skill)
+}
+
+fn is_set(flag: AffectedFlags, bit: AffectedFlags) -> bool {
+    flag.contains(bit)
+}
+
+fn get_pos(ch: &CharData) -> Position {
+    ch.specials.position
+}
+
+pub fn awake(ch: &CharData) -> bool {
+    get_pos(ch) > Position::Sleeping
 }

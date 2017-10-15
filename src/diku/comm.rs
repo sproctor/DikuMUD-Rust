@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
-use std::rc::Rc;
 use std::os::unix::io::RawFd;
 
 use nix::sys::socket::{bind, linger, listen, socket, setsockopt, sockopt, AddressFamily, InetAddr, IpAddr, Ipv4Addr, SockAddr, SockType, SockFlag};
 
 use diku::types::*;
+use diku::utility::{awake, can_see};
 
 fn get_from_q(queue: &mut VecDeque<String>) -> Option<String> {
     queue.pop_back()
@@ -40,10 +40,30 @@ pub fn init_socket(port: u16) -> RawFd {
     s
 }
 
-fn act(string: &str, world: &RoomTable, hide_invisible: bool, ch: &CharData, obj: &ObjData, vict_obj: &CharData, typ: VictimType) {
-    let to = match typ {
-        ToVict => vec![Rc::new(vict_obj)],
-        ToChar => vec![Rc::new(ch)],
-        _ => world.get(&ch.in_room).unwrap().people,
+/*****************************************************************
+*	Public routines for system-to-player-communication           *
+******************************************************************/
+
+pub fn send_to_char(messg: String, ch: &mut CharData) {
+    match ch.desc.as_mut() {
+        Some(desc) => if !messg.is_empty() { write_to_q(messg, &mut desc.output); },
+        _ => (),
+    }
+}
+
+pub fn act(string: String, world: &RoomTable, hide_invisible: bool, ch: &CharData,
+        obj: Option<&ObjData>, vict_obj: Option<&CharData>, typ: VictimType) {
+    let tos = match typ {
+        ToVict => vict_obj.into_iter().collect(),
+        ToChar => vec![ch],
+        _ => world.get(&ch.in_room).unwrap().people.iter().map(|x| x.as_ref()).collect(),
     };
+
+    for to in tos {
+        if to.desc.is_some() && (to != ch || typ == VictimType::ToChar) &&
+                (can_see(to, ch) || !hide_invisible) && awake(to) &&
+                !(typ == VictimType::ToNotVict && Some(to) == vict_obj) {
+
+        }
+    }
 }

@@ -12,7 +12,7 @@ use diku::constants;
 // The following definitions are for ObjData
 
 // for 'type_flag'
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub enum ItemType {
     Light,
     Scroll,
@@ -106,13 +106,13 @@ bitflags! {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct ExtraDescrData {
     pub keyword: String,        // Keyword in look/examine
     pub description: String,    // What to see
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct ObjFlagData {
     container_flags:    ContainerFlags,
     type_flag:          ItemType,           // Type of item
@@ -125,13 +125,13 @@ pub struct ObjFlagData {
     bitvector:          u64,                // To set chars bits
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct ObjAffectedType {
     location: u8,   // Which ability to change (APPLY_XXX)
     modifier: u16,  // How much it changes by
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct ObjData {
     item_number:        u16,                    // Where in database
     in_room:            Option<u16>,            // In what room. None when conta/carr
@@ -302,7 +302,7 @@ bitflags! {
     }
 }
 
-#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub enum AbilityModifier {
     None,
     Str,
@@ -342,7 +342,7 @@ pub enum SavingThrowModifier {
 }
 
 // 'class' for PC's
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub enum Class {
     MagicUser,
     Cleric,
@@ -351,7 +351,7 @@ pub enum Class {
 }
 
 // sex
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub enum Sex {
     Neutral,
     Male,
@@ -359,7 +359,7 @@ pub enum Sex {
 }
 
 // positions
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Position {
     Dead,
     MortallyW,
@@ -401,14 +401,14 @@ pub struct TimeInfoData {
     pub year:   u16,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct TimeData {
     birth:  SystemTime, // This represents the characters age
     logon:  SystemTime, // Time of last logon (used to calculate played)
     played: Duration,   // This is the total accumulated time played in secs
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct CharPlayerData {
     name:           String, // PC / NPC s name (kill ... )
     short_descr:    String, // for 'actions'
@@ -427,7 +427,7 @@ pub struct CharPlayerData {
 }
 
 // used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharAbilityData {
     stren:      i8,
     str_add:    i8,     // 000 - 100 if strength 18
@@ -438,7 +438,7 @@ pub struct CharAbilityData {
 }
 
 // Used in CHAR_FILE_U DO NOT CHANGE
-#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharPointData {
     mana:       i16,
     max_mana:   i16, // Not useable may be erased upon player file renewal
@@ -453,37 +453,37 @@ pub struct CharPointData {
     damroll:    i8,     // Any bonus or penalty to the damage roll
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct CharSpecialData {
-    fighting:           Option<Rc<CharData>>,   // Opponent
-    hunting:            Option<Rc<CharData>>,   // Hunting person..
-    affected_by:        AffectedFlags,      // bitvector for spells/skills affected by
-    position:           Position,           // Standing or ...
-    default_pos:        Position,           // Default position for NPC
-    act:                SpecialActFlags,    // flags for NPC behavior
-    spells_to_learn:    u8,                 // How many can you learn yet this level
-    carry_weight:       u32,                // Carried weight
-    timer:              i32,                // Timer for update
-    was_in_room:        i16,                // storage of location for linkdead people
-    apply_saving_throw: EnumMap<SavingThrowModifier, i16>,
-    conditions:         EnumMap<Condition, i8>,
-    damnodice:          i8,                 // The number of damage dice's
-    damsizedice:        i8,                 // The size of te damage dice's
-    last_direction:     Direction,          // The last direction the monster went
-    attack_type:        i32,                // The Attack Type Bitvector for NPC's
+    pub fighting:           Option<Rc<CharData>>,   // Opponent
+    pub hunting:            Option<Rc<CharData>>,   // Hunting person..
+    pub affected_by:        AffectedFlags,      // bitvector for spells/skills affected by
+    pub position:           Position,           // Standing or ...
+    pub default_pos:        Position,           // Default position for NPC
+    pub act:                SpecialActFlags,    // flags for NPC behavior
+    pub spells_to_learn:    u8,                 // How many can you learn yet this level
+    pub carry_weight:       u32,                // Carried weight
+    pub timer:              i32,                // Timer for update
+    pub was_in_room:        i16,                // storage of location for linkdead people
+    pub apply_saving_throw: EnumMap<SavingThrowModifier, i16>,
+    pub conditions:         EnumMap<Condition, i8>,
+    pub damnodice:          i8,                 // The number of damage dice's
+    pub damsizedice:        i8,                 // The size of te damage dice's
+    pub last_direction:     Direction,          // The last direction the monster went
+    pub attack_type:        i32,                // The Attack Type Bitvector for NPC's
     // Note from sproctor: `attack_type` seems to be unused. It is definitely not a bitvector
-    alignment:          i32,                // +-1000 for alignments
+    pub alignment:          i32,                // +-1000 for alignments
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CharSkillData {
     learned:    i8,
     recognise:  bool,
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Eq, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct AffectedType {
     spell_type:     i8,     // The type of spell that caused this
     duration:       i16,    // For how long its effects will last
@@ -493,7 +493,7 @@ pub struct AffectedType {
 }
 
 // ================== Structure for player/non-player =====================
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct CharData {
     pub nr:             u64,                // monster nr (pos in file)
     pub in_room:        u32,                // Location
@@ -602,7 +602,7 @@ pub struct ObjFileU {
 // *  The following structures are related to descriptor_data   *
 // **************************************************************
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub enum ConnectionMode {
     Plying,
     Nme,
@@ -620,13 +620,13 @@ pub enum ConnectionMode {
     PwdNCnf,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct SnoopData {
     snooping:   Rc<CharData>,
     snoop_by:   Rc<CharData>,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq)]
 pub struct DescriptorData {
     descriptor: c_int,
     host:       String,
@@ -778,7 +778,7 @@ pub struct PoseType {
     pub room_msg:   [String; 4],
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum VictimType {
     ToRoom,
     ToVict,

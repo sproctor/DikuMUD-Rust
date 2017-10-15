@@ -1,3 +1,4 @@
+pub mod act_comm;
 pub mod act_social;
 pub mod comm;
 pub mod constants;
@@ -7,5 +8,6 @@ pub mod interpreter;
 pub mod modify;
 pub mod signals;
 pub mod spec_assign;
+pub mod spec_procs;
 pub mod types;
 pub mod utility;
