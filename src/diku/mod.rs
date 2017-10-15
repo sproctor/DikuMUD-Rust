@@ -9,5 +9,6 @@ pub mod modify;
 pub mod signals;
 pub mod spec_assign;
 pub mod spec_procs;
+pub mod spells;
 pub mod types;
 pub mod utility;

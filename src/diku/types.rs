@@ -234,7 +234,7 @@ pub struct RoomData {
     pub dir_option:     HashMap<Direction, RoomDirectionData>, // Directions
     pub room_flags:     RoomFlags,          // DEATH, DARK, etc
     pub light:          u8,                 // Number of lightsources in room
-    pub funct:          Option<fn(i32)>,    // special procedure
+    pub funct:          Option<SpecialProcedure>,    // special procedure
     pub contents:       Vec<Rc<ObjData>>,   // List of items in room
     pub people:         Vec<Rc<CharData>>,  // List of NPC / PC in room
 }
@@ -747,7 +747,7 @@ pub struct IndexData {
     //pub virtual_nr: u32,
     pub pos:        u64,
     pub number:     u32,
-    pub func:       Option<fn(&mut CharData, i32, str) -> i32>,
+    pub func:       Option<SpecialProcedure>,
 }
 
 pub struct SocialMessg {
@@ -790,3 +790,4 @@ pub type RoomTable = HashMap<u32, RoomData>;
 pub type ZoneTable = Vec<ZoneData>;
 pub type FilePosTable = HashMap<String, u64>;
 pub type IndexTable = HashMap<u32, IndexData>;
+pub type SpecialProcedure = fn(&RoomTable, &mut CharData, i32, &str) -> bool;

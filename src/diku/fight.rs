@@ -4,8 +4,8 @@ use std::io::BufReader;
 use std::io::prelude::*;
 
 use diku::constants::MESS_FILE;
-use diku::types::{MessageType, MsgType};
-use diku::utility::fread_string;
+use diku::types::*;
+use diku::utility::{fread_string, read_line_trim, read_number};
 
 pub fn load_messages() -> HashMap<u32, Vec<MessageType>> {
     let file = File::open(MESS_FILE).expect("read messages");
@@ -13,8 +13,8 @@ pub fn load_messages() -> HashMap<u32, Vec<MessageType>> {
     
     let mut fight_messages = HashMap::new();
 
-    while trim_line(&mut reader).chars().nth(0) == Some('M') {
-        let a_type = trim_line(&mut reader).parse::<u32>().unwrap();
+    while read_line_trim(&mut reader).bytes().nth(0) == Some(b'M') {
+        let a_type = read_number(&mut reader, true).unwrap();
         let message_list = fight_messages.entry(a_type).or_insert(Vec::new());
 
         let die_msg = read_msgs(&mut reader);
@@ -45,8 +45,6 @@ fn read_msgs<R: Read>(reader: &mut BufReader<R>) -> MsgType {
     }
 }
 
-fn trim_line<R: Read>(reader: &mut BufReader<R>) -> String {
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
-    String::from(line.trim())
+pub fn hit(ch: &CharData, victim: &CharData, a_type: i32) {
+
 }

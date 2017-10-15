@@ -51,12 +51,12 @@ pub fn send_to_char(messg: String, ch: &mut CharData) {
     }
 }
 
-pub fn act(string: String, world: &RoomTable, hide_invisible: bool, ch: &CharData,
+pub fn act(string: &str, world: &RoomTable, hide_invisible: bool, ch: &CharData,
         obj: Option<&ObjData>, vict_obj: Option<&CharData>, typ: VictimType) {
     let tos = match typ {
         ToVict => vict_obj.into_iter().collect(),
         ToChar => vec![ch],
-        _ => world.get(&ch.in_room).unwrap().people.iter().map(|x| x.as_ref()).collect(),
+        _ => world[&ch.in_room].people.iter().map(|x| x.as_ref()).collect(),
     };
 
     for to in tos {
