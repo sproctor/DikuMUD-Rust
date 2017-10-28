@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 
 use diku::constants::{POSEMESS_FILE, SOCMESS_FILE};
-use diku::types::{PoseType, SocialMessg};
+use diku::structs::{PoseType, SocialMessg};
 use diku::utility::read_number;
 
 pub fn boot_social_messages() -> Vec<SocialMessg> {

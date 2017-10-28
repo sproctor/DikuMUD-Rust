@@ -19,7 +19,7 @@ mod diku;
 
 use diku::comm::init_socket;
 use diku::constants;
-use diku::game::Game;
+use diku::structs::Game;
 use diku::signals::signal_setup;
 use diku::utility::log;
 

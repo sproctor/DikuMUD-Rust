@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::fs::File;
@@ -5,11 +6,11 @@ use std::io::{BufReader, SeekFrom};
 use std::io::prelude::*;
 use std::str;
 use std::os::unix::io::RawFd;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bincode::{deserialize_from, Infinite};
-use chan::Receiver;
 use chan_signal;
 use chan_signal::Signal;
 
@@ -18,42 +19,10 @@ use diku::constants;
 use diku::fight::load_messages;
 use diku::modify::{build_help_index};
 use diku::spec_assign::assign_mobiles;
-use diku::types::*;
+use diku::structs::*;
 use diku::utility::{dice, fread_string, log, mud_time_passed, read_char, read_number};
 
 pub static TICS: AtomicUsize = ATOMIC_USIZE_INIT;
-
-pub struct Game {
-    descriptor_list:    Vec<DescriptorData>,
-    lawful:             bool,
-    wizlock:            bool,
-    slow_death:         bool,
-    shutdown:           bool,
-    reboot:             bool,
-    no_specials:        bool,
-    weather_info:       WeatherData,
-    news:               String,
-    credits:            String,
-    motd:               String,
-    help:               String,
-    info:               String,
-    wizlist:            String,
-    mob_f:              File,
-    obj_f:              File,
-    help_f:             Option<File>,
-    help_index:         FilePosTable,
-    mob_index:          IndexTable,
-    obj_index:          IndexTable,
-    player_table:       FilePosTable,
-    zone_table:         ZoneTable,
-    world:              RoomTable,
-    fight_messages:     HashMap<u32, Vec<MessageType>>,
-    soc_mess_list:      Vec<SocialMessg>,
-    pose_messages:      Vec<PoseType>,
-    shutdown_signal:    Receiver<Signal>,
-    hup_signal:         Receiver<Signal>,
-    log_signal:         Receiver<Signal>,
-}
 
 impl Game {
     pub fn new(lawful: bool, no_specials: bool) -> Game {
@@ -140,6 +109,7 @@ impl Game {
             player_table,
             zone_table,
             world,
+            combat_list: RefCell::new(Vec::new()),
             fight_messages,
             soc_mess_list,
             pose_messages,
@@ -366,7 +336,7 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
             match chk.bytes().nth(0).unwrap() {
                 b'D' => {
                     let dir = Direction::from(chk.get(1..).unwrap().parse::<u8>().unwrap());
-                    dir_option.insert(dir, setup_dir(&mut reader));
+                    dir_option.insert(dir, Rc::new(setup_dir(&mut reader)));
                 },
                 b'E' => {
                     let keyword = fread_string(&mut reader);
@@ -379,7 +349,7 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
         }
         world.insert(virtual_nr, RoomData {
             number: virtual_nr,
-            zone,
+            zone: zone as u16,
             sector_type,
             name: temp,
             description,

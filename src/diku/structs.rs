@@ -1,9 +1,13 @@
-use std::collections::{HashMap, VecDeque};
+use std::cell::RefCell;
+use std::collections::{HashMap, LinkedList, VecDeque};
+use std::fs::File;
 use std::mem::transmute;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 use std::vec::Vec;
 
+use chan::Receiver;
+use chan_signal::Signal;
 use enum_map::EnumMap;
 use libc::{c_int, time_t};
 
@@ -12,7 +16,7 @@ use diku::constants;
 // The following definitions are for ObjData
 
 // for 'type_flag'
-#[derive(PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ItemType {
     Light,
     Scroll,
@@ -106,45 +110,45 @@ bitflags! {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct ExtraDescrData {
     pub keyword: String,        // Keyword in look/examine
     pub description: String,    // What to see
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct ObjFlagData {
-    container_flags:    ContainerFlags,
-    type_flag:          ItemType,           // Type of item
-    wear_flags:         WearFlags,          // Where you can wear it
-    extra_flags:        ItemExtraFlags,     // If it hums, glows, etc
-    weight:             u32,                // Derr...
-    cost:               u32,                // Value when sold (gp.)
-    cost_per_day:       u32,                // Cost to keep pr. real day
-    timer:              u32,                // Timer for object
-    bitvector:          u64,                // To set chars bits
+    pub value:              [i32; 4],
+    pub type_flag:          ItemType,           // Type of item
+    pub wear_flags:         WearFlags,          // Where you can wear it
+    pub extra_flags:        ItemExtraFlags,     // If it hums, glows, etc
+    pub weight:             i32,                // Derr...
+    pub cost:               u32,                // Value when sold (gp.)
+    pub cost_per_day:       u32,                // Cost to keep pr. real day
+    pub timer:              u32,                // Timer for object
+    pub bitvector:          u64,                // To set chars bits
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct ObjAffectedType {
     location: u8,   // Which ability to change (APPLY_XXX)
     modifier: u16,  // How much it changes by
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct ObjData {
-    item_number:        u16,                    // Where in database
-    in_room:            Option<u16>,            // In what room. None when conta/carr
-    obj_flags:          ObjFlagData,            // Object information
-    affected:           [ObjAffectedType; constants::MAX_OBJ_AFFECT],  // Which abilities in PC to change
-    name:               String,                 // Title of object :get etc
-    description:        String,                 // When in room
-    short_description:  String,                 // When worn/carry/in cont.
-    action_description: String,                 // What to write when used
-    ex_description:     Vec<ExtraDescrData>,    // extra descriptions
-    carried_by:         Option<Rc<CharData>>,   // Carried by. None in room/conta
-    in_obj:             Option<Rc<ObjData>>,    // In what object. None when none
-    contains:           Vec<Rc<ObjData>>,       // Contains objects
+    pub item_number:        u16,                    // Where in database
+    pub in_room:            Option<u16>,            // In what room. None when conta/carr
+    pub obj_flags:          ObjFlagData,            // Object information
+    pub affected:           [ObjAffectedType; constants::MAX_OBJ_AFFECT],  // Which abilities in PC to change
+    pub name:               String,                 // Title of object :get etc
+    pub description:        String,                 // When in room
+    pub short_description:  String,                 // When worn/carry/in cont.
+    pub action_description: String,                 // What to write when used
+    pub ex_description:     Vec<ExtraDescrData>,    // extra descriptions
+    pub carried_by:         Option<Rc<RefCell<CharData>>>,   // Carried by. None in room/conta
+    pub in_obj:             Option<Rc<RefCell<ObjData>>>,    // In what object. None when none
+    pub contains:           Vec<Rc<RefCell<ObjData>>>,       // Contains objects
 }
 
 // For 'room_flags'
@@ -198,6 +202,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum SectorType {
     Inside = 0,
     City,
@@ -216,6 +221,7 @@ impl From<u8> for SectorType {
     }
 }
 
+#[derive(Eq, PartialEq)]
 pub struct RoomDirectionData {
     pub general_description:    String,     // When look DIR.
     pub keyword:                String,     // for open/close
@@ -226,12 +232,12 @@ pub struct RoomDirectionData {
 
 pub struct RoomData {
     pub number:         u32,                // Rooms number
-    pub zone:           usize,              // Room zone (for resetting)
+    pub zone:           u16,              // Room zone (for resetting)
     pub sector_type:    SectorType,         // sector type (move/hide)
     pub name:           String,             // Rooms name 'You are ...'
     pub description:    String,             // Shown when entered
     pub ex_description: Vec<ExtraDescrData>,    // for examine/look
-    pub dir_option:     HashMap<Direction, RoomDirectionData>, // Directions
+    pub dir_option:     HashMap<Direction, Rc<RoomDirectionData>>, // Directions
     pub room_flags:     RoomFlags,          // DEATH, DARK, etc
     pub light:          u8,                 // Number of lightsources in room
     pub funct:          Option<SpecialProcedure>,    // special procedure
@@ -239,10 +245,18 @@ pub struct RoomData {
     pub people:         Vec<Rc<CharData>>,  // List of NPC / PC in room
 }
 
+impl Eq for RoomData {}
+
+impl PartialEq for RoomData {
+    fn eq(&self, other: &Self) -> bool {
+        self.number == other.number
+    }
+}
+
 // The following defs and structures are related to CharData
 
 // for 'equipment'
-#[derive(EnumMap)]
+#[derive(Clone, Copy, EnumMap)]
 pub enum EquipmentPosition {
     Light,
     FingerR,
@@ -302,7 +316,7 @@ bitflags! {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub enum AbilityModifier {
     None,
     Str,
@@ -322,7 +336,6 @@ pub enum AbilityModifier {
     Gold,
     Exp,
     Ac,
-    Armor,
     Hitroll,
     Damroll,
     SavingPara,
@@ -342,16 +355,16 @@ pub enum SavingThrowModifier {
 }
 
 // 'class' for PC's
-#[derive(PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Class {
-    MagicUser,
+    MagicUser = 1,
     Cleric,
     Thief,
     Warrior,
 }
 
 // sex
-#[derive(PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Sex {
     Neutral,
     Male,
@@ -401,59 +414,59 @@ pub struct TimeInfoData {
     pub year:   u16,
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct TimeData {
-    birth:  SystemTime, // This represents the characters age
-    logon:  SystemTime, // Time of last logon (used to calculate played)
-    played: Duration,   // This is the total accumulated time played in secs
+    pub birth:  SystemTime, // This represents the characters age
+    pub logon:  SystemTime, // Time of last logon (used to calculate played)
+    pub played: Duration,   // This is the total accumulated time played in secs
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct CharPlayerData {
-    name:           String, // PC / NPC s name (kill ... )
-    short_descr:    String, // for 'actions'
-    long_descr:     String, // for 'look'.. Only here for testing
-    description:    String, // Extra descriptions
-    title:          String, // PC / NPC s title
-    sex:            Sex,    // PC / NPC s sex
-    class:          Class,  // PC s class
-    level:          u8,     // PC / NPC s level
-    hometown:       u32,    // PC s Hometown (zone)
-    talks:          [bool; constants::MAX_TOUNGE], // PC s Tounges 0 for NPC
-    time:           TimeData,   // PC s AGE in days
-    tmptime:        TimeData,   // PC s AGE in days, modified
-    weight:         u8,     // PC / NPC s weight
-    height:         u8,     // PC / NPC s height
+    pub name:           String, // PC / NPC s name (kill ... )
+    pub short_descr:    String, // for 'actions'
+    pub long_descr:     String, // for 'look'.. Only here for testing
+    pub description:    String, // Extra descriptions
+    pub title:          &'static str, // PC / NPC s title
+    pub sex:            Sex,    // PC / NPC s sex
+    pub class:          Class,  // PC s class
+    pub level:          u8,     // PC / NPC s level
+    pub hometown:       u16,    // PC s Hometown (zone)
+    pub talks:          [bool; constants::MAX_TOUNGE], // PC s Tounges 0 for NPC
+    pub time:           TimeData,   // PC s AGE in days
+    pub tmptime:        TimeData,   // PC s AGE in days, modified
+    pub weight:         u8,     // PC / NPC s weight
+    pub height:         u8,     // PC / NPC s height
 }
 
 // used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct CharAbilityData {
-    stren:      i8,
-    str_add:    i8,     // 000 - 100 if strength 18
-    intel:      i8,
-    wis:        i8,
-    dex:        i8,
-    con:        i8,
+    pub str:        u8,
+    pub str_add:    u8,     // 000 - 100 if strength 18
+    pub intel:      u8,
+    pub wis:        u8,
+    pub dex:        u8,
+    pub con:        u8,
 }
 
 // Used in CHAR_FILE_U DO NOT CHANGE
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct CharPointData {
-    mana:       i16,
-    max_mana:   i16, // Not useable may be erased upon player file renewal
-    hit:        i16,
-    max_hit:    i16,    // Max hit for NPC
-    mov:        i16,
-    max_mov:    i16,    // Max move for NPC
-    armor:      i16,    // internal -100..100, external -10..10 AC
-    gold:       i32,    // Money carried
-    exp:        i32,    // The experience of the player
-    hitroll:    i8,     // Any bonus or penalty to the hit roll
-    damroll:    i8,     // Any bonus or penalty to the damage roll
+    pub mana:       i16,
+    pub max_mana:   i16, // Not useable may be erased upon player file renewal
+    pub hit:        i16,
+    pub max_hit:    i16,    // Max hit for NPC
+    pub mov:        i16,
+    pub max_mov:    i16,    // Max move for NPC
+    pub armor:      i16,    // internal -100..100, external -10..10 AC
+    pub gold:       i32,    // Money carried
+    pub exp:        i32,    // The experience of the player
+    pub hitroll:    i8,     // Any bonus or penalty to the hit roll
+    pub damroll:    i8,     // Any bonus or penalty to the damage roll
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct CharSpecialData {
     pub fighting:           Option<Rc<CharData>>,   // Opponent
     pub hunting:            Option<Rc<CharData>>,   // Hunting person..
@@ -462,7 +475,8 @@ pub struct CharSpecialData {
     pub default_pos:        Position,           // Default position for NPC
     pub act:                SpecialActFlags,    // flags for NPC behavior
     pub spells_to_learn:    u8,                 // How many can you learn yet this level
-    pub carry_weight:       u32,                // Carried weight
+    pub carry_weight:       i32,                // Carried weight
+    pub carry_items:        u8,                 // Number of items carried
     pub timer:              i32,                // Timer for update
     pub was_in_room:        i16,                // storage of location for linkdead people
     pub apply_saving_throw: EnumMap<SavingThrowModifier, i16>,
@@ -476,42 +490,42 @@ pub struct CharSpecialData {
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct CharSkillData {
     learned:    i8,
     recognise:  bool,
 }
 
 // Used in CHAR_FILE_U *DO*NOT*CHANGE*
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct AffectedType {
-    spell_type:     i8,     // The type of spell that caused this
-    duration:       i16,    // For how long its effects will last
-    modifier:       i8,     // This is added to appropriate ability
-    location:       AbilityModifier,    // Tells which ability to change(APPLY_XXX)
-    bitvector:      AffectedFlags,      // Tells which bits to set (AFF_XXX)
+    pub spell_type:     i32,     // The type of spell that caused this
+    pub duration:       i16,    // For how long its effects will last
+    pub modifier:       i8,     // This is added to appropriate ability
+    pub location:       AbilityModifier,    // Tells which ability to change(APPLY_XXX)
+    pub bitvector:      AffectedFlags,      // Tells which bits to set (AFF_XXX)
 }
 
 // ================== Structure for player/non-player =====================
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct CharData {
-    pub nr:             u64,                // monster nr (pos in file)
-    pub in_room:        u32,                // Location
-    pub player:         CharPlayerData,     // Normal data
+    pub nr:             Option<u64>,        // monster nr (pos in file)
+    pub in_room:        Rc<RoomData>,                // Location
+    pub player:         RefCell<CharPlayerData>,     // Normal data
     pub abilities:      CharAbilityData,    // Abilities
-    pub tmpabilities:   CharAbilityData,    // The abilities we use
-    pub points:         CharPointData,      // Points
-    pub specials:       CharSpecialData,    // Special plaing constants
+    pub tmpabilities:   RefCell<CharAbilityData>,    // The abilities we use
+    pub points:         RefCell<CharPointData>,      // Points
+    pub specials:       RefCell<CharSpecialData>,    // Special plaing constants
     pub skills:         Vec<CharSkillData>, // Skills
 
-    pub affected:       Vec<AffectedType>,  // affected by what spells
-    pub equipment:      EnumMap<EquipmentPosition, Rc<ObjData>>, // Equipment array
+    pub affected:       LinkedList<AffectedType>,  // affected by what spells
+    pub equipment:      EnumMap<EquipmentPosition, Option<Rc<ObjData>>>, // Equipment array
 
     pub carrying:       Vec<Rc<ObjData>>,
-    pub desc:           Option<DescriptorData>, // None for mobiles
+    pub desc:           Option<RefCell<DescriptorData>>, // None for mobiles
 
-    pub followers:      Vec<Rc<CharData>>,  // List of char followers
-    pub master:         Option<Rc<CharData>>,   // Who is char following?
+    pub followers:      RefCell<Vec<Rc<CharData>>>,  // List of char followers
+    pub master:         RefCell<Option<Rc<CharData>>>,   // Who is char following?
 }
 
 /* ======================================================================== */
@@ -602,7 +616,7 @@ pub struct ObjFileU {
 // *  The following structures are related to descriptor_data   *
 // **************************************************************
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum ConnectionMode {
     Plying,
     Nme,
@@ -620,32 +634,32 @@ pub enum ConnectionMode {
     PwdNCnf,
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct SnoopData {
-    snooping:   Rc<CharData>,
-    snoop_by:   Rc<CharData>,
+    snooping:   Rc<RefCell<CharData>>,
+    snoop_by:   Rc<RefCell<CharData>>,
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct DescriptorData {
-    descriptor: c_int,
-    host:       String,
-    pwd:        String,
-    pos:        i32,
-    connected:  ConnectionMode,
-    wait:       i32,
+    pub descriptor:     c_int,
+    pub host:           String,
+    pub pwd:            String,
+    pub pos:            i32,
+    pub connected:      ConnectionMode,
+    pub wait:           i32,
     // showstr_head
     // showstr_point
     // str
     // max_str
-    prompt_mode:    i32,
-    buf:            Vec<u8>,
-    last_input:     Vec<u8>,
-    pub output:     VecDeque<String>,   // q of strings to send
-    pub input:      VecDeque<String>,   // q of unprocessed input
-    character:      Rc<CharData>,       // linked to char
+    pub prompt_mode:    i32,
+    pub buf:            Vec<u8>,
+    pub last_input:     Vec<u8>,
+    pub output:         VecDeque<String>,   // q of strings to send
+    pub input:          VecDeque<String>,   // q of unprocessed input
+    pub character:      Rc<RefCell<CharData>>,       // linked to char
     //original          // original char
-    snoop:          SnoopData,          // to snoop people
+    pub snoop:          SnoopData,          // to snoop people
 }
 
 pub struct MsgType {
@@ -677,16 +691,16 @@ pub struct DexSkillType {
 }
 
 pub struct DexAppType {
-    reaction:   i16,
-    miss_att:   i16,
-    defensive:  i16,
+    pub reaction:   i16,
+    pub miss_att:   i16,
+    pub defensive:  i16,
 }
 
 pub struct StrAppType {
-    tohit:      i16,
-    todam:      i16,
-    carry_w:    i16,
-    wield_w:    i16,
+    pub tohit:      i16,
+    pub todam:      i16,
+    pub carry_w:    i32,
+    pub wield_w:    i16,
 }
 
 pub struct WisAppType {
@@ -698,8 +712,8 @@ pub struct IntAppType {
 }
 
 pub struct ConAppType {
-    hitp:   i16,
-    shock:  i16,
+    pub hitp:   i16,
+    pub shock:  i16,
 }
 
 pub enum MessageTarget {
@@ -778,6 +792,12 @@ pub struct PoseType {
     pub room_msg:   [String; 4],
 }
 
+pub struct TitleType {
+    pub title_m: &'static str,
+    pub title_f: &'static str,
+    pub exp: i32,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum VictimType {
     ToRoom,
@@ -786,8 +806,53 @@ pub enum VictimType {
     ToChar,
 }
 
+// Attacktypes with grammar
+pub struct AttackHitType {
+    pub singular:   &'static str,
+    pub plural:     &'static str,
+}
+
+pub struct DamWeaponType {
+    pub to_room:    &'static str,
+    pub to_char:    &'static str,
+    pub to_victim:  &'static str,
+}
+
 pub type RoomTable = HashMap<u32, RoomData>;
 pub type ZoneTable = Vec<ZoneData>;
 pub type FilePosTable = HashMap<String, u64>;
 pub type IndexTable = HashMap<u32, IndexData>;
-pub type SpecialProcedure = fn(&RoomTable, &mut CharData, i32, &str) -> bool;
+pub type SpecialProcedure = fn(Rc<CharData>, i32, &str, &Game) -> bool;
+
+pub struct Game {
+    pub descriptor_list:    Vec<DescriptorData>,
+    pub lawful:             bool,
+    pub wizlock:            bool,
+    pub slow_death:         bool,
+    pub shutdown:           bool,
+    pub reboot:             bool,
+    pub no_specials:        bool,
+    pub weather_info:       WeatherData,
+    pub news:               String,
+    pub credits:            String,
+    pub motd:               String,
+    pub help:               String,
+    pub info:               String,
+    pub wizlist:            String,
+    pub mob_f:              File,
+    pub obj_f:              File,
+    pub help_f:             Option<File>,
+    pub help_index:         FilePosTable,
+    pub mob_index:          IndexTable,
+    pub obj_index:          IndexTable,
+    pub player_table:       FilePosTable,
+    pub zone_table:         ZoneTable,
+    pub world:              RoomTable,
+    pub combat_list:        RefCell<Vec<Rc<CharData>>>,
+    pub fight_messages:     HashMap<i32, Vec<MessageType>>,
+    pub soc_mess_list:      Vec<SocialMessg>,
+    pub pose_messages:      Vec<PoseType>,
+    pub shutdown_signal:    Receiver<Signal>,
+    pub hup_signal:         Receiver<Signal>,
+    pub log_signal:         Receiver<Signal>,
+}
