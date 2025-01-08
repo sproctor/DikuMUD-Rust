@@ -126,11 +126,11 @@ pub fn fread_string<R: Read>(reader: &mut BufReader<R>) -> String {
 
 impl RoomData {
     pub fn is_dark(self: &RoomData) -> bool {
-        self.light == 0 && self.room_flags.contains(RoomFlags::DARK)
+        *self.light.borrow() == 0 && self.room_flags.contains(RoomFlags::DARK)
     }
 
     pub fn is_light(self: &RoomData) -> bool {
-        self.light != 0 || !self.room_flags.contains(RoomFlags::DARK)
+        *self.light.borrow() != 0 || !self.room_flags.contains(RoomFlags::DARK)
     }
 }
 
@@ -375,7 +375,7 @@ impl CharData {
 
     pub fn can_go(self: &CharData, door: Direction) -> bool {
         match self.exit(door) {
-            Some(dir) => dir.to_room != NOWHERE && !dir.exit_info.contains(ExitFlags::EX_CLOSED),
+            Some(dir) => dir.to_room.is_some() && !dir.exit_info.contains(ExitFlags::EX_CLOSED),
             None => false,
         }
     }
@@ -432,5 +432,22 @@ impl ObjData {
 
     pub fn sana(self: &ObjData) -> &'static str {
         if "aeiouyAEIOUY".contains(self.name.chars().nth(0).unwrap()) { "an" } else { "a" }
+    }
+}
+
+pub fn current_line_number<R: Read + Seek>(reader: &mut BufReader<R>) -> u32 {
+    let mut pos = reader.seek(SeekFrom::Current(0)).unwrap();
+    reader.seek(SeekFrom::Start(0)).unwrap();
+    let mut count = 0;
+    loop {
+        count += 1;
+        match reader.read_line(&mut String::new()) {
+            Ok(n) => if n as u64 > pos {
+                return count;
+            } else {
+                pos -= n as u64;
+            },
+            Err(_) => return count,
+        }
     }
 }

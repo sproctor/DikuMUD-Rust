@@ -6,10 +6,11 @@ use std::io::prelude::*;
 use std::ops::DerefMut;
 use std::rc::Rc;
 
+use diku::act_offensive::do_flee;
 use diku::comm::act;
 use diku::constants::*;
 use diku::handler::{affect_from_char, affected_by_spell};
-use diku::limits::gain_exp;
+use diku::limits::{gain_exp, hit_limit};
 use diku::spell_parser::stop_follower;
 use diku::spells::*;
 use diku::structs::*;
@@ -220,6 +221,42 @@ pub fn damage(ch: Rc<CharData>, victim: Rc<CharData>, dam: i16,
             None => (),
         }
     }
+    match victim.get_pos() {
+        Position::MortallyW => {
+            act("$n is mortally wounded, and will die soon, if not aided.",
+                true, &victim, None, None, None, None, VictimType::ToRoom);
+            act("You are mortally wounded, and will die soon, if not aided.",
+                false, &victim, None, None, None, None, VictimType::ToChar);
+        },
+        Position::Incap => {
+            act("$n is incapacitated and will slowly die, if not aided.", true, &victim, None, None, None, None, VictimType::ToRoom);
+			act("You are incapacitated an will slowly die, if not aided.", false, &victim, None, None, None, None, VictimType::ToChar);
+        },
+        Position::Stunned => {
+            act("$n is stunned, but will probably regain conscience again.", true, &victim, None, None, None, None, VictimType::ToRoom);
+			act("You're stunned, but will probably regain conscience again.", false, &victim, None, None, None, None, VictimType::ToChar);
+        },
+        Position::Dead => {
+            act("$n is dead! R.I.P.", false, &victim, None, None, None, None, VictimType::ToRoom);
+			act("You are dead!  Sorry...", false, &victim, None, None, None, None, VictimType::ToChar);
+        },
+        _ => {
+            let max_hit = hit_limit(&victim);
+
+            if dam > max_hit / 5 {
+                act("That Really did HURT!", false, &victim, None, None, None, None, VictimType::ToChar);
+            }
+
+            if victim.get_hit() < max_hit / 5 {
+                act("You wish that your wounds would stop BLEEDING that much!", false, &victim, None, None, None, None, VictimType::ToChar);
+                if victim.is_npc() {
+                    if victim.specials.borrow().act.contains(SpecialActFlags::ACT_WIMPY) {
+                        do_flee(victim, "", 0, game);
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub fn hit(ch: Rc<CharData>, victim: Rc<CharData>, attacktype: i32, game: &Game) {
@@ -291,7 +328,31 @@ pub fn hit(ch: Rc<CharData>, victim: Rc<CharData>, attacktype: i32, game: &Game)
             if ch.is_npc() {
                 dam += dice(ch.specials.borrow().damnodice as u32,
                     ch.specials.borrow().damsizedice as u32) as i16;
+            } else {
+                dam += number(0, 2) as i16; // Max. 2 dam with bare hands
             }
+        } else {
+            dam += dice(wielded.unwrap().obj_flags.value[1] as u32,
+                wielded.unwrap().obj_flags.value[2] as u32) as i16;
+        }
+
+        if victim.get_pos() < Position::Fighting {
+            dam *= 1 + (Position::Fighting - victim.get_pos()) as i16 / 3;
+        }
+        /* Position  sitting  x 1.33 */
+		/* Position  resting  x 1.66 */
+		/* Position  sleeping x 2.00 */
+		/* Position  stunned  x 2.33 */
+		/* Position  incap    x 2.66 */
+		/* Position  mortally x 3.00 */
+
+        dam = max(1, dam);
+
+        if attacktype == SKILL_BACKSTAB {
+            dam *= BACKSTAB_MULT[ch.get_level() as usize] as i16;
+            damage(Rc::clone(&ch), victim, dam, SKILL_BACKSTAB, game);
+        } else {
+            damage(Rc::clone(&ch), victim, dam, w_type, game);
         }
     }
 }

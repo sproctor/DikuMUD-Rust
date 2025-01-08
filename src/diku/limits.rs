@@ -97,7 +97,7 @@ pub fn gain_exp(ch: &CharData, gain: i32) {
                 let mut i: u8 = 0;
                 while TITLES[ch.get_class() as usize - 1][i as usize].exp <= ch.get_exp() {
                     if i > ch.get_level() {
-                        send_to_char(String::from("You rase a level\n\r"), &ch);
+                        send_to_char("You raise a level\n\r", &ch);
                         ch.player.borrow_mut().level = i;
                         advance_level(ch);
                         is_altered = true;

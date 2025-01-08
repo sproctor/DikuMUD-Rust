@@ -1,4 +1,6 @@
 pub mod act_comm;
+pub mod act_movement;
+pub mod act_offensive;
 pub mod act_social;
 pub mod comm;
 pub mod constants;

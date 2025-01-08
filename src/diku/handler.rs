@@ -119,3 +119,16 @@ pub fn affected_by_spell(ch: &CharData, skill: i32) -> bool {
 fn affect_remove(ch: &CharData, af: &AffectedType) {
     affect_modify(ch, af.location, af.modifier, af.bitvector, false);
 }
+
+pub fn char_from_room(ch: &CharData) {
+    let light = ch.equipment[EquipmentPosition::Light].as_ref();
+    if light.is_some() {
+        if light.unwrap().obj_flags.type_flag == ItemType::Light {
+            if light.unwrap().obj_flags.value[2] != 0 {
+                *ch.in_room.light.borrow_mut() -= 1;
+            }
+        }
+    }
+
+    //ch.in_room.people.remove(ch);
+}

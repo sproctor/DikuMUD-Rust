@@ -20,7 +20,7 @@ use diku::fight::load_messages;
 use diku::modify::{build_help_index};
 use diku::spec_assign::assign_mobiles;
 use diku::structs::*;
-use diku::utility::{dice, fread_string, log, mud_time_passed, read_char, read_number};
+use diku::utility::{current_line_number, dice, fread_string, log, mud_time_passed, read_char, read_number};
 
 pub static TICS: AtomicUsize = ATOMIC_USIZE_INIT;
 
@@ -356,10 +356,10 @@ fn boot_world(zone_table: &Vec<ZoneData>) -> HashMap<u32, RoomData> {
             ex_description,
             dir_option,
             room_flags,
-            light: 0,
+            light: RefCell::new(0),
             funct: None,
-            contents: Vec::new(),
-            people: Vec::new(),
+            contents: RefCell::new(Vec::new()),
+            people: RefCell::new(Vec::new()),
         });
     }
     world
@@ -376,8 +376,10 @@ fn setup_dir<R: Read + Seek>(reader: &mut BufReader<R>) -> RoomDirectionData {
         2 => ExitFlags::EX_ISDOOR | ExitFlags::EX_PICKPROOF,
         _ => ExitFlags::empty(),
     };
-    let key = read_number(reader, true).unwrap();
-    let to_room = read_number(reader, true).unwrap();
+    let key_nr = read_number::<R, i32>(reader, true).unwrap();
+    let key = if key_nr < 0 { None } else { Some(key_nr as u32) };
+    let room_nr = read_number::<R, i32>(reader, true).unwrap();
+    let to_room = if room_nr < 0 { None } else { Some(room_nr as u32) };
 
     RoomDirectionData {
         general_description,

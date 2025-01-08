@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList, VecDeque};
 use std::fs::File;
-use std::mem::transmute;
+use std::ops::Sub;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 use std::vec::Vec;
@@ -137,8 +137,8 @@ pub struct ObjAffectedType {
 
 #[derive(Eq, PartialEq)]
 pub struct ObjData {
-    pub item_number:        u16,                    // Where in database
-    pub in_room:            Option<u16>,            // In what room. None when conta/carr
+    pub item_number:        u32,                    // Where in database
+    pub in_room:            Option<Rc<RoomData>>,   // In what room. None when conta/carr
     pub obj_flags:          ObjFlagData,            // Object information
     pub affected:           [ObjAffectedType; constants::MAX_OBJ_AFFECT],  // Which abilities in PC to change
     pub name:               String,                 // Title of object :get etc
@@ -202,9 +202,9 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, EnumMap, Eq, PartialEq)]
 pub enum SectorType {
-    Inside = 0,
+    Inside,
     City,
     Field,
     Forest,
@@ -216,8 +216,17 @@ pub enum SectorType {
 
 impl From<u8> for SectorType {
     fn from(n: u8) -> SectorType {
-        assert!(SectorType::Inside as u8 <= n && n <= SectorType::WaterNoSwim as u8);
-        unsafe { transmute(n) }
+        match n {
+            0 => SectorType::Inside,
+            1 => SectorType::City,
+            2 => SectorType::Field,
+            3 => SectorType::Forest,
+            4 => SectorType::Hills,
+            5 => SectorType::Mountain,
+            6 => SectorType::WaterSwim,
+            7 => SectorType::WaterNoSwim,
+            _ => panic!("Invalid sector number {}", n),
+        }
     }
 }
 
@@ -226,23 +235,23 @@ pub struct RoomDirectionData {
     pub general_description:    String,     // When look DIR.
     pub keyword:                String,     // for open/close
     pub exit_info:              ExitFlags,  // Exit info
-    pub key:                    i32,        // Key's number (-1 for no key)
-    pub to_room:                i32,        // Where direction leads (NOWHERE)
+    pub key:                    Option<u32>,        // Key's number (-1 for no key)
+    pub to_room:                Option<u32>,        // Where direction leads (NOWHERE)
 }
 
 pub struct RoomData {
     pub number:         u32,                // Rooms number
-    pub zone:           u16,              // Room zone (for resetting)
+    pub zone:           u16,                // Room zone (for resetting)
     pub sector_type:    SectorType,         // sector type (move/hide)
     pub name:           String,             // Rooms name 'You are ...'
     pub description:    String,             // Shown when entered
     pub ex_description: Vec<ExtraDescrData>,    // for examine/look
     pub dir_option:     HashMap<Direction, Rc<RoomDirectionData>>, // Directions
     pub room_flags:     RoomFlags,          // DEATH, DARK, etc
-    pub light:          u8,                 // Number of lightsources in room
+    pub light:          RefCell<u8>,                 // Number of lightsources in room
     pub funct:          Option<SpecialProcedure>,    // special procedure
-    pub contents:       Vec<Rc<ObjData>>,   // List of items in room
-    pub people:         Vec<Rc<CharData>>,  // List of NPC / PC in room
+    pub contents:       RefCell<Vec<Rc<ObjData>>>,   // List of items in room
+    pub people:         RefCell<Vec<Rc<CharData>>>,  // List of NPC / PC in room
 }
 
 impl Eq for RoomData {}
@@ -374,7 +383,7 @@ pub enum Sex {
 // positions
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Position {
-    Dead,
+    Dead = 0,
     MortallyW,
     Incap,
     Stunned,
@@ -383,6 +392,14 @@ pub enum Position {
     Sitting,
     Fighting,
     Standing,
+}
+
+impl Sub for Position {
+    type Output = i8;
+
+    fn sub(self, other: Position) -> i8 {
+        self as i8 - other as i8
+    }
 }
 
 // for specials.act
@@ -478,7 +495,7 @@ pub struct CharSpecialData {
     pub carry_weight:       i32,                // Carried weight
     pub carry_items:        u8,                 // Number of items carried
     pub timer:              i32,                // Timer for update
-    pub was_in_room:        i16,                // storage of location for linkdead people
+    pub was_in_room:        u32,                // storage of location for linkdead people
     pub apply_saving_throw: EnumMap<SavingThrowModifier, i16>,
     pub conditions:         EnumMap<Condition, i8>,
     pub damnodice:          i8,                 // The number of damage dice's
@@ -509,7 +526,7 @@ pub struct AffectedType {
 // ================== Structure for player/non-player =====================
 #[derive(Eq, PartialEq)]
 pub struct CharData {
-    pub nr:             Option<u64>,        // monster nr (pos in file)
+    pub nr:             Option<u32>,        // monster nr (pos in file)
     pub in_room:        Rc<RoomData>,                // Location
     pub player:         RefCell<CharPlayerData>,     // Normal data
     pub abilities:      CharAbilityData,    // Abilities

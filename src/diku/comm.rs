@@ -45,9 +45,9 @@ pub fn init_socket(port: u16) -> RawFd {
 *	Public routines for system-to-player-communication           *
 ******************************************************************/
 
-pub fn send_to_char(messg: String, ch: &CharData) {
+pub fn send_to_char(messg: &str, ch: &CharData) {
     match ch.desc.as_ref() {
-        Some(desc) => if !messg.is_empty() { write_to_q(messg, &mut desc.borrow_mut().output); },
+        Some(desc) => if !messg.is_empty() { write_to_q(String::from(messg), &mut desc.borrow_mut().output); },
         _ => (),
     }
 }
@@ -62,7 +62,7 @@ pub fn act(string: &str, hide_invisible: bool, ch: &CharData,
         VictimType::ToChar =>
             act_helper(ch, string, hide_invisible, ch, obj, vict, vict_obj,
                 vict_str, vtype),
-        _ => for to in &ch.in_room.people {
+        _ => for to in ch.in_room.people.borrow().iter() {
                 act_helper(to, string, hide_invisible, ch, obj, vict,
                     vict_obj, vict_str, vtype);
             },
